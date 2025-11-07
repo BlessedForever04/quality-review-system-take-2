@@ -29,56 +29,73 @@ class _MyprojectState extends State<Myproject> {
         Project(
           id: 'p1',
           title: 'Implement New CRM System',
+          description:
+              'Develop and implement a comprehensive Customer Relationship Management system to streamline sales and customer support processes.',
           started: DateTime(2024, 6, 1),
           priority: 'High',
           status: 'In Progress',
           executor: 'Emily Carter',
+          assignedEmployees: ['Emily Carter', 'David Lee', 'Sophia Clark'],
         ),
         Project(
           id: 'p2',
           title: 'Develop Marketing Strategy',
+          description:
+              'Create a comprehensive marketing strategy for Q3 2024 including social media, content marketing, and paid advertising campaigns.',
           started: DateTime(2024, 5, 20),
           priority: 'Medium',
           status: 'Completed',
           executor: 'David Lee',
+          assignedEmployees: ['David Lee', 'Liam Walker', 'Noah Clark'],
         ),
         Project(
           id: 'p3',
           title: 'Conduct Market Research',
+          description:
+              'Perform detailed market research to identify new opportunities and understand customer needs in emerging markets.',
           started: DateTime(2024, 6, 10),
           priority: 'Low',
           status: 'Not Started',
-          executor: null,
+          assignedEmployees: ['Emily Carter', 'Olivia Harris'],
         ),
         Project(
           id: 'p4',
           title: 'Build Analytics Dashboard',
+          description:
+              'Design and develop a real-time analytics dashboard for tracking key business metrics and KPIs.',
           started: DateTime(2024, 5, 5),
           priority: 'High',
           status: 'In Progress',
           executor: 'Sophia Clark',
+          assignedEmployees: ['Sophia Clark', 'James Wright'],
         ),
         Project(
           id: 'p5',
           title: 'Mobile App Development',
+          description:
+              'Develop a cross-platform mobile application for iOS and Android to enhance customer engagement.',
           started: DateTime(2024, 6, 15),
           priority: 'High',
           status: 'In Progress',
           executor: 'Emily Carter',
+          assignedEmployees: ['Emily Carter', 'William Hall', 'Isabella King'],
         ),
         Project(
           id: 'p6',
           title: 'Website Redesign',
+          description:
+              'Complete redesign of the company website with modern UI/UX, improved performance, and better SEO.',
           started: DateTime(2024, 5, 10),
           priority: 'Medium',
           status: 'Completed',
           executor: 'Emily Carter',
+          assignedEmployees: ['Emily Carter', 'Ava Lewis'],
         ),
       ]);
     }
   }
 
-  // Filter projects to show only those assigned to the current user
+  // Filter projects to show only those where current user is the executor
   List<Project> get _myProjects {
     return _ctrl.projects
         .where((project) => project.executor == currentUser)
@@ -128,6 +145,20 @@ class _MyprojectState extends State<Myproject> {
                     scrollDirection: Axis.horizontal,
                     child: Obx(() {
                       final projects = _myProjects;
+
+                      if (projects.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Center(
+                            child: Text(
+                              'No projects assigned to you',
+                              style: Theme.of(context).textTheme.bodyLarge
+                                  ?.copyWith(color: Colors.grey[500]),
+                            ),
+                          ),
+                        );
+                      }
+
                       return DataTable(
                         sortAscending: _sortAscending,
                         sortColumnIndex: _sortColumnIndex,

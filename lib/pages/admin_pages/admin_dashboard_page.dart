@@ -158,7 +158,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Good Morning, Shamrao', style: Theme.of(context).textTheme.headlineMedium),
+                  Text('Welcome Back!', style: Theme.of(context).textTheme.headlineMedium),
                   ElevatedButton.icon(
                     onPressed: _showCreateDialog,
                     icon: const Icon(Icons.add),

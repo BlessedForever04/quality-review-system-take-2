@@ -13,8 +13,6 @@ class EmployeePage extends StatefulWidget {
 
 class _TeamPageState extends State<EmployeePage> {
   late final TeamController _ctrl;
-  int? _sortColumnIndex;
-  bool _sortAscending = true;
 
   @override
   void initState() {
@@ -23,11 +21,51 @@ class _TeamPageState extends State<EmployeePage> {
 
     if (_ctrl.members.isEmpty) {
       _ctrl.loadInitial([
-        TeamMember(id: 't1', name: 'Emma Carter', email: 'emma.carter@example.com', role: 'Team Leader', status: 'Active', dateAdded: '2023-08-15', lastActive: '2024-05-20'),
-        TeamMember(id: 't2', name: 'Liam Walker', email: 'liam.walker@example.com', role: 'Member', status: 'Active', dateAdded: '2023-09-22', lastActive: '2024-05-21'),
-        TeamMember(id: 't3', name: 'Olivia Harris', email: 'olivia.harris@example.com', role: 'Reviewer', status: 'Inactive', dateAdded: '2023-10-10', lastActive: '2024-04-30'),
-        TeamMember(id: 't4', name: 'Noah Clark', email: 'noah.clark@example.com', role: 'Member', status: 'Active', dateAdded: '2023-11-05', lastActive: '2024-05-19'),
-        TeamMember(id: 't5', name: 'Ava Lewis', email: 'ava.lewis@example.com', role: 'Team Leader', status: 'Pending', dateAdded: '2023-12-18', lastActive: 'Never'),
+        TeamMember(
+          id: 't1',
+          name: 'Emma Carter',
+          email: 'emma.carter@example.com',
+          role: 'Team Leader',
+          status: 'Active',
+          dateAdded: '2023-08-15',
+          lastActive: '2024-05-20',
+        ),
+        TeamMember(
+          id: 't2',
+          name: 'Liam Walker',
+          email: 'liam.walker@example.com',
+          role: 'Member',
+          status: 'Active',
+          dateAdded: '2023-09-22',
+          lastActive: '2024-05-21',
+        ),
+        TeamMember(
+          id: 't3',
+          name: 'Olivia Harris',
+          email: 'olivia.harris@example.com',
+          role: 'Reviewer',
+          status: 'Inactive',
+          dateAdded: '2023-10-10',
+          lastActive: '2024-04-30',
+        ),
+        TeamMember(
+          id: 't4',
+          name: 'Noah Clark',
+          email: 'noah.clark@example.com',
+          role: 'Member',
+          status: 'Active',
+          dateAdded: '2023-11-05',
+          lastActive: '2024-05-19',
+        ),
+        TeamMember(
+          id: 't5',
+          name: 'Ava Lewis',
+          email: 'ava.lewis@example.com',
+          role: 'Team Leader',
+          status: 'Pending',
+          dateAdded: '2023-12-18',
+          lastActive: 'Never',
+        ),
       ]);
     }
   }
@@ -73,23 +111,29 @@ class _TeamPageState extends State<EmployeePage> {
               children: [
                 TextFormField(
                   decoration: const InputDecoration(labelText: 'Full name *'),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter name' : null,
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Enter name' : null,
                   onSaved: (v) => name = v!.trim(),
                 ),
                 TextFormField(
                   decoration: const InputDecoration(labelText: 'Email *'),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter email' : null,
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Enter email' : null,
                   onSaved: (v) => email = v!.trim(),
                 ),
                 DropdownButtonFormField<String>(
                   initialValue: role,
-                  items: ['Team Leader', 'Member', 'Reviewer'].map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                  items: ['Team Leader', 'Member', 'Reviewer']
+                      .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                      .toList(),
                   onChanged: (v) => role = v ?? role,
                   decoration: const InputDecoration(labelText: 'Role *'),
                 ),
                 DropdownButtonFormField<String>(
                   initialValue: status,
-                  items: ['Active', 'Inactive', 'Pending'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                  items: ['Active', 'Inactive', 'Pending']
+                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                      .toList(),
                   onChanged: (v) => status = v ?? status,
                   decoration: const InputDecoration(labelText: 'Status *'),
                 ),
@@ -97,7 +141,10 @@ class _TeamPageState extends State<EmployeePage> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () {
                 if (formKey.currentState?.validate() ?? false) {
@@ -108,7 +155,10 @@ class _TeamPageState extends State<EmployeePage> {
                     email: email,
                     role: role,
                     status: status,
-                    dateAdded: DateTime.now().toIso8601String().split('T').first,
+                    dateAdded: DateTime.now()
+                        .toIso8601String()
+                        .split('T')
+                        .first,
                     lastActive: 'Never',
                   );
                   _ctrl.addMember(newMember);
@@ -116,7 +166,7 @@ class _TeamPageState extends State<EmployeePage> {
                 }
               },
               child: const Text('Add'),
-            )
+            ),
           ],
         );
       },
@@ -143,24 +193,30 @@ class _TeamPageState extends State<EmployeePage> {
                 TextFormField(
                   initialValue: name,
                   decoration: const InputDecoration(labelText: 'Full name *'),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter name' : null,
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Enter name' : null,
                   onSaved: (v) => name = v!.trim(),
                 ),
                 TextFormField(
                   initialValue: email,
                   decoration: const InputDecoration(labelText: 'Email *'),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter email' : null,
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Enter email' : null,
                   onSaved: (v) => email = v!.trim(),
                 ),
                 DropdownButtonFormField<String>(
                   initialValue: role,
-                  items: ['Team Leader', 'Member', 'Reviewer'].map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                  items: ['Team Leader', 'Member', 'Reviewer']
+                      .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                      .toList(),
                   onChanged: (v) => role = v ?? role,
                   decoration: const InputDecoration(labelText: 'Role *'),
                 ),
                 DropdownButtonFormField<String>(
                   initialValue: status,
-                  items: ['Active', 'Inactive', 'Pending'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                  items: ['Active', 'Inactive', 'Pending']
+                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                      .toList(),
                   onChanged: (v) => status = v ?? status,
                   decoration: const InputDecoration(labelText: 'Status *'),
                 ),
@@ -168,18 +224,26 @@ class _TeamPageState extends State<EmployeePage> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () {
                 if (formKey.currentState?.validate() ?? false) {
                   formKey.currentState?.save();
-                  final updated = m.copyWith(name: name, email: email, role: role, status: status);
+                  final updated = m.copyWith(
+                    name: name,
+                    email: email,
+                    role: role,
+                    status: status,
+                  );
                   _ctrl.updateMember(m.id, updated);
                   Navigator.of(context).pop();
                 }
               },
               child: const Text('Save'),
-            )
+            ),
           ],
         );
       },
@@ -193,8 +257,14 @@ class _TeamPageState extends State<EmployeePage> {
         title: const Text('Delete Member'),
         content: Text('Delete "${m.name}"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
@@ -216,75 +286,173 @@ class _TeamPageState extends State<EmployeePage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('User Management', style: Theme.of(context).textTheme.headlineMedium),
+                      Text(
+                        'User Management',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
                       ElevatedButton.icon(
                         onPressed: _showAddDialog,
                         icon: const Icon(Icons.add),
                         label: const Text('Add New User'),
                         style: ElevatedButton.styleFrom(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 20),
-                  Card(
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Obx(() {
-                          final list = _ctrl.filtered;
-                          return DataTable(
-                            columnSpacing: 24,
-                            sortAscending: _sortAscending,
-                            sortColumnIndex: _sortColumnIndex,
-                            columns: [
-                              DataColumn(
-                                label: const Text('User'),
-                                onSort: (colIndex, asc) {
-                                  setState(() {
-                                    _sortColumnIndex = colIndex;
-                                    _sortAscending = asc;
-                                    _ctrl.members.sort((a, b) => asc ? a.name.compareTo(b.name) : b.name.compareTo(a.name));
-                                  });
-                                },
+                  Obx(() {
+                    final list = _ctrl.filtered;
+
+                    if (list.isEmpty) {
+                      return Card(
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(48.0),
+                          child: Center(
+                            child: Text(
+                              'No team members found',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 16,
                               ),
-                              const DataColumn(label: Text('Email')),
-                              const DataColumn(label: Text('Role')),
-                              const DataColumn(label: Text('Status')),
-                              DataColumn(
-                                label: const Text('Date Added'),
-                                onSort: (colIndex, asc) {
-                                  setState(() {
-                                    _sortColumnIndex = colIndex;
-                                    _sortAscending = asc;
-                                    _ctrl.members.sort((a, b) => asc ? a.dateAdded.compareTo(b.dateAdded) : b.dateAdded.compareTo(a.dateAdded));
-                                  });
-                                },
-                              ),
-                              const DataColumn(label: Text('Last Active')),
-                              const DataColumn(label: Text('Actions')),
-                            ],
-                            rows: list.map((e) {
-                              return DataRow(cells: [
-                                DataCell(Row(children: [CircleAvatar(radius: 18, child: Text(e.name[0])), const SizedBox(width: 12), Text(e.name)])),
-                                DataCell(Text(e.email)),
-                                DataCell(_roleChip(e.role)),
-                                DataCell(_statusChip(e.status)),
-                                DataCell(Text(e.dateAdded)),
-                                DataCell(Text(e.lastActive)),
-                                DataCell(Row(children: [IconButton(onPressed: () => _showEditDialog(e), icon: const Icon(Icons.edit, size: 20)), IconButton(onPressed: () => _confirmDelete(e), icon: const Icon(Icons.delete_outline, size: 20))])),
-                              ]);
-                            }).toList(),
-                          );
-                        }),
-                      ),
-                    ),
-                  ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
+                    return ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: list.length,
+                      itemBuilder: (context, index) {
+                        final e = list[index];
+                        return Card(
+                          elevation: 0,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 24,
+                                      backgroundColor: Colors.blue[100],
+                                      child: Text(
+                                        e.name[0],
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue[900],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            e.name,
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            e.email,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    _roleChip(e.role),
+                                    const SizedBox(width: 8),
+                                    _statusChip(e.status),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.calendar_today,
+                                      size: 16,
+                                      color: Colors.grey,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Added: ${e.dateAdded}',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 24),
+                                    const Icon(
+                                      Icons.access_time,
+                                      size: 16,
+                                      color: Colors.grey,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Last Active: ${e.lastActive}',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    TextButton.icon(
+                                      onPressed: () => _showEditDialog(e),
+                                      icon: const Icon(Icons.edit, size: 18),
+                                      label: const Text('Edit'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    TextButton.icon(
+                                      onPressed: () => _confirmDelete(e),
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        size: 18,
+                                      ),
+                                      label: const Text('Delete'),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.red,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  }),
                 ],
               ),
             ),
@@ -295,44 +463,110 @@ class _TeamPageState extends State<EmployeePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Filters', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Filters',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 12),
                 Card(
                   elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(12.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Filter by Role', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const Text(
+                          'Filter by Role',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         const SizedBox(height: 8),
-                        Obx(() => Column(children: [
-                          CheckboxListTile(value: _ctrl.selectedRoles.contains('Team Leader'), onChanged: (v) => v == true ? _ctrl.selectedRoles.add('Team Leader') : _ctrl.selectedRoles.remove('Team Leader'), title: const Text('Team Leader')),
-                          CheckboxListTile(value: _ctrl.selectedRoles.contains('Member'), onChanged: (v) => v == true ? _ctrl.selectedRoles.add('Member') : _ctrl.selectedRoles.remove('Member'), title: const Text('Member')),
-                          CheckboxListTile(value: _ctrl.selectedRoles.contains('Reviewer'), onChanged: (v) => v == true ? _ctrl.selectedRoles.add('Reviewer') : _ctrl.selectedRoles.remove('Reviewer'), title: const Text('Reviewer')),
-                        ])),
+                        Obx(
+                          () => Column(
+                            children: [
+                              CheckboxListTile(
+                                value: _ctrl.selectedRoles.contains(
+                                  'Team Leader',
+                                ),
+                                onChanged: (v) => v == true
+                                    ? _ctrl.selectedRoles.add('Team Leader')
+                                    : _ctrl.selectedRoles.remove('Team Leader'),
+                                title: const Text('Team Leader'),
+                              ),
+                              CheckboxListTile(
+                                value: _ctrl.selectedRoles.contains('Member'),
+                                onChanged: (v) => v == true
+                                    ? _ctrl.selectedRoles.add('Member')
+                                    : _ctrl.selectedRoles.remove('Member'),
+                                title: const Text('Member'),
+                              ),
+                              CheckboxListTile(
+                                value: _ctrl.selectedRoles.contains('Reviewer'),
+                                onChanged: (v) => v == true
+                                    ? _ctrl.selectedRoles.add('Reviewer')
+                                    : _ctrl.selectedRoles.remove('Reviewer'),
+                                title: const Text('Reviewer'),
+                              ),
+                            ],
+                          ),
+                        ),
                         const SizedBox(height: 12),
-                        const Text('Filter by Status', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const Text(
+                          'Filter by Status',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         const SizedBox(height: 8),
-                        Obx(() => Column(children: [
-                          CheckboxListTile(value: _ctrl.selectedStatuses.contains('Active'), onChanged: (v) => v == true ? _ctrl.selectedStatuses.add('Active') : _ctrl.selectedStatuses.remove('Active'), title: const Text('Active')),
-                          CheckboxListTile(value: _ctrl.selectedStatuses.contains('Inactive'), onChanged: (v) => v == true ? _ctrl.selectedStatuses.add('Inactive') : _ctrl.selectedStatuses.remove('Inactive'), title: const Text('Inactive')),
-                          CheckboxListTile(value: _ctrl.selectedStatuses.contains('Pending'), onChanged: (v) => v == true ? _ctrl.selectedStatuses.add('Pending') : _ctrl.selectedStatuses.remove('Pending'), title: const Text('Pending')),
-                        ])),
+                        Obx(
+                          () => Column(
+                            children: [
+                              CheckboxListTile(
+                                value: _ctrl.selectedStatuses.contains(
+                                  'Active',
+                                ),
+                                onChanged: (v) => v == true
+                                    ? _ctrl.selectedStatuses.add('Active')
+                                    : _ctrl.selectedStatuses.remove('Active'),
+                                title: const Text('Active'),
+                              ),
+                              CheckboxListTile(
+                                value: _ctrl.selectedStatuses.contains(
+                                  'Inactive',
+                                ),
+                                onChanged: (v) => v == true
+                                    ? _ctrl.selectedStatuses.add('Inactive')
+                                    : _ctrl.selectedStatuses.remove('Inactive'),
+                                title: const Text('Inactive'),
+                              ),
+                              CheckboxListTile(
+                                value: _ctrl.selectedStatuses.contains(
+                                  'Pending',
+                                ),
+                                onChanged: (v) => v == true
+                                    ? _ctrl.selectedStatuses.add('Pending')
+                                    : _ctrl.selectedStatuses.remove('Pending'),
+                                title: const Text('Pending'),
+                              ),
+                            ],
+                          ),
+                        ),
                         const SizedBox(height: 12),
                         ElevatedButton(
                           onPressed: () => _ctrl.clearFilters(),
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF2F5F8), foregroundColor: Colors.black),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFF2F5F8),
+                            foregroundColor: Colors.black,
+                          ),
                           child: const Text('Clear Filters'),
-                        )
+                        ),
                       ],
                     ),
                   ),
-                )
+                ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );

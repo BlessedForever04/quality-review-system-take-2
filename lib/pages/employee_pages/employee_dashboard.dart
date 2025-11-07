@@ -13,8 +13,6 @@ class EmployeeDashboardPage extends StatefulWidget {
 
 class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
   late final ProjectsController _ctrl;
-  int? _sortColumnIndex;
-  bool _sortAscending = true;
 
   @override
   void initState() {
@@ -23,13 +21,55 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
 
     if (_ctrl.projects.isEmpty) {
       _ctrl.loadInitial([
-        Project(id: 'p1', title: 'Implement New CRM System', started: DateTime(2024, 6, 1), priority: 'High', status: 'In Progress', executor: 'Emily Carter'),
-        Project(id: 'p2', title: 'Develop Marketing Strategy', started: DateTime(2024, 5, 20), priority: 'Medium', status: 'Completed', executor: 'David Lee'),
-        Project(id: 'p3', title: 'Conduct Market Research', started: DateTime(2024, 6, 10), priority: 'Low', status: 'Not Started', executor: null),
-        Project(id: 'p4', title: 'Build Analytics Dashboard', started: DateTime(2024, 5, 5), priority: 'High', status: 'In Progress', executor: 'Sophia Clark'),
+        Project(
+          id: 'p1',
+          title: 'Implement New CRM System',
+          description:
+              'Develop and implement a comprehensive Customer Relationship Management system to streamline sales and customer support processes.',
+          started: DateTime(2024, 6, 1),
+          priority: 'High',
+          status: 'In Progress',
+          executor: 'Emily Carter',
+          assignedEmployees: ['Emily Carter', 'David Lee', 'Sophia Clark'],
+        ),
+        Project(
+          id: 'p2',
+          title: 'Develop Marketing Strategy',
+          description:
+              'Create a comprehensive marketing strategy for Q3 2024 including social media, content marketing, and paid advertising campaigns.',
+          started: DateTime(2024, 5, 20),
+          priority: 'Medium',
+          status: 'Completed',
+          executor: 'David Lee',
+          assignedEmployees: ['David Lee', 'Liam Walker', 'Noah Clark'],
+        ),
+        Project(
+          id: 'p3',
+          title: 'Conduct Market Research',
+          description:
+              'Perform detailed market research to identify new opportunities and understand customer needs in emerging markets.',
+          started: DateTime(2024, 6, 10),
+          priority: 'Low',
+          status: 'Not Started',
+          assignedEmployees: ['Emily Carter', 'Olivia Harris'],
+        ),
+        Project(
+          id: 'p4',
+          title: 'Build Analytics Dashboard',
+          description:
+              'Design and develop a real-time analytics dashboard for tracking key business metrics and KPIs.',
+          started: DateTime(2024, 5, 5),
+          priority: 'High',
+          status: 'In Progress',
+          executor: 'Sophia Clark',
+          assignedEmployees: ['Sophia Clark', 'James Wright'],
+        ),
       ]);
     }
   }
+
+  // Mock data: Current logged-in user
+  final String currentUser = 'Emily Carter';
 
   Future<void> _showCreateDialog() async {
     final formKey = GlobalKey<FormState>();
@@ -50,15 +90,23 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextFormField(
-                  decoration: const InputDecoration(labelText: 'Project Title *'),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter title' : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Project Title *',
+                  ),
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Enter title' : null,
                   onSaved: (v) => title = v!.trim(),
                 ),
                 // Date picker field
                 TextFormField(
                   readOnly: true,
-                  controller: TextEditingController(text: '${started.year}-${started.month.toString().padLeft(2,'0')}-${started.day.toString().padLeft(2,'0')}'),
-                  decoration: const InputDecoration(labelText: 'Started Date *'),
+                  controller: TextEditingController(
+                    text:
+                        '${started.year}-${started.month.toString().padLeft(2, '0')}-${started.day.toString().padLeft(2, '0')}',
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Started Date *',
+                  ),
                   onTap: () async {
                     final picked = await showDatePicker(
                       context: context,
@@ -76,28 +124,39 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                 ),
                 DropdownButtonFormField<String>(
                   initialValue: priority,
-                  items: ['High', 'Medium', 'Low'].map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
+                  items: ['High', 'Medium', 'Low']
+                      .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                      .toList(),
                   onChanged: (v) => priority = v ?? priority,
                   decoration: const InputDecoration(labelText: 'Priority *'),
                 ),
                 DropdownButtonFormField<String>(
                   initialValue: status,
-                  items: ['In Progress', 'Completed', 'Not Started'].map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
+                  items: ['In Progress', 'Completed', 'Not Started']
+                      .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                      .toList(),
                   onChanged: (v) => status = v ?? status,
                   decoration: const InputDecoration(labelText: 'Status *'),
                 ),
                 // Executor dropdown populated from team members
                 DropdownButtonFormField<String>(
                   initialValue: executor,
-                  items: _teamNames().map((n) => DropdownMenuItem(value: n, child: Text(n))).toList(),
+                  items: _teamNames()
+                      .map((n) => DropdownMenuItem(value: n, child: Text(n)))
+                      .toList(),
                   onChanged: (v) => executor = v,
-                  decoration: const InputDecoration(labelText: 'Executor (optional)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Executor (optional)',
+                  ),
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () {
                 if (formKey.currentState?.validate() ?? false) {
@@ -108,7 +167,9 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                     started: started,
                     priority: priority,
                     status: status,
-                    executor: (executor == null || executor?.isEmpty == true) ? null : executor,
+                    executor: (executor == null || executor?.isEmpty == true)
+                        ? null
+                        : executor,
                   );
                   _ctrl.addProject(newProject);
                   Navigator.of(context).pop();
@@ -133,7 +194,7 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
       'William Hall',
       'Sophia Young',
       'James Wright',
-      'Isabella King'
+      'Isabella King',
     ];
   }
 
@@ -141,9 +202,32 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
     Color bg = const Color(0xFFEFF3F7);
     if (p == 'High') bg = const Color(0xFFFBEFEF);
     if (p == 'Low') bg = const Color(0xFFF5F7FA);
-    return Chip(label: Text(p, style: const TextStyle(fontSize: 12)), backgroundColor: bg);
+    return Chip(
+      label: Text(p, style: const TextStyle(fontSize: 12)),
+      backgroundColor: bg,
+    );
   }
 
+  Widget _statusChip(String status) {
+    Color bg = const Color(0xFFEFF3F7);
+    Color textColor = Colors.black87;
+
+    if (status == 'In Progress') {
+      bg = const Color(0xFFE3F2FD);
+      textColor = Colors.blue[900]!;
+    } else if (status == 'Completed') {
+      bg = const Color(0xFFE8F5E9);
+      textColor = Colors.green[900]!;
+    } else if (status == 'Not Started') {
+      bg = const Color(0xFFFFF3E0);
+      textColor = Colors.orange[900]!;
+    }
+
+    return Chip(
+      label: Text(status, style: TextStyle(fontSize: 12, color: textColor)),
+      backgroundColor: bg,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -158,83 +242,179 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Good Morning, Shamrao', style: Theme.of(context).textTheme.headlineMedium),
+                  Text(
+                    'Welcome back!',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
                   ElevatedButton.icon(
                     onPressed: _showCreateDialog,
                     icon: const Icon(Icons.add),
                     label: const Text('Create New Project'),
-                    style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 8,
-                      offset: Offset(0, 2),
+              Obx(() {
+                final projects = _ctrl.projects;
+
+                if (projects.isEmpty) {
+                  return Container(
+                    padding: const EdgeInsets.all(48.0),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 8,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Obx(() {
-                      final projects = _ctrl.projects;
-                      return DataTable(
-                        sortAscending: _sortAscending,
-                        sortColumnIndex: _sortColumnIndex,
-                        columnSpacing: 90,
-                        columns: [
-                          DataColumn(
-                            label: const Text('Project Title'),
-                            onSort: (colIndex, asc) {
-                              setState(() {
-                                _sortColumnIndex = colIndex;
-                                _sortAscending = asc;
-                                _ctrl.projects.sort((a, b) => asc ? a.title.compareTo(b.title) : b.title.compareTo(a.title));
-                              });
-                            },
+                    child: Center(
+                      child: Text(
+                        'No projects available',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: projects.length,
+                  itemBuilder: (context, index) {
+                    final proj = projects[index];
+                    final executor =
+                        (proj.status == 'In Progress' ||
+                            proj.status == 'Completed')
+                        ? (proj.executor ?? 'Unassigned')
+                        : 'Not assigned';
+                    final isNotStarted = proj.status == 'Not Started';
+                    final isAssignedToUser =
+                        proj.assignedEmployees?.contains(currentUser) ?? false;
+                    final canStart = isNotStarted && isAssignedToUser;
+
+                    return GestureDetector(
+                      onTap: () => _showProjectDetails(proj, canStart),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 12.0),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      proj.title,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blue,
+                                      ),
+                                    ),
+                                  ),
+                                  _priorityChip(proj.priority),
+                                  const SizedBox(width: 8),
+                                  _statusChip(proj.status),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.calendar_today,
+                                    size: 16,
+                                    color: Colors.grey,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Started: ${proj.started.day}/${proj.started.month}/${proj.started.year}',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 24),
+                                  const Icon(
+                                    Icons.person,
+                                    size: 16,
+                                    color: Colors.grey,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Executor: $executor',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                canStart
+                                    ? 'Click to view details and start project'
+                                    : 'Click to view project details',
+                                style: TextStyle(
+                                  color: canStart
+                                      ? Colors.blue[700]
+                                      : Colors.grey[600],
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  TextButton.icon(
+                                    onPressed: () => _showEditDialog(proj),
+                                    icon: const Icon(Icons.edit, size: 18),
+                                    label: const Text('Edit'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  TextButton.icon(
+                                    onPressed: () => _confirmDelete(proj),
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      size: 18,
+                                    ),
+                                    label: const Text('Delete'),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: Colors.red,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                          DataColumn(
-                            label: const Text('Started Date'),
-                            onSort: (colIndex, asc) {
-                              setState(() {
-                                _sortColumnIndex = colIndex;
-                                _sortAscending = asc;
-                                _ctrl.projects.sort((a, b) => asc ? a.started.compareTo(b.started) : b.started.compareTo(a.started));
-                              });
-                            },
-                          ),
-                          const DataColumn(label: Text('Priority')),
-                          const DataColumn(label: Text('Status')),
-                          const DataColumn(label: Text('Executor')),
-                          const DataColumn(label: Text('Actions')),
-                        ],
-                        rows: projects.map((proj) {
-                          final executor = (proj.status == 'In Progress' || proj.status == 'Completed') ? (proj.executor ?? '--') : '--';
-                          return DataRow(cells: [
-                            DataCell(Container(constraints: const BoxConstraints(maxWidth: 300), child: Text(proj.title))),
-                            DataCell(Text('${proj.started.year}-${proj.started.month.toString().padLeft(2, '0')}-${proj.started.day.toString().padLeft(2, '0')}')),
-                            DataCell(_priorityChip(proj.priority)),
-                            DataCell(Text(proj.status)),
-                            DataCell(Text(executor)),
-                            DataCell(Row(children: [
-                              IconButton(onPressed: () => _showEditDialog(proj), icon: const Icon(Icons.edit, size: 20)),
-                              IconButton(onPressed: () => _confirmDelete(proj), icon: const Icon(Icons.delete_outline, size: 20)),
-                            ])),
-                          ]);
-                        }).toList(),
-                      );
-                    }),
-                  ),
-                ),
-              ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }),
             ],
           ),
         ),
@@ -253,56 +433,70 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return  Container(
-              width: 400,
-              height: 400,
-              child: Column(
-                children: [
-                  TextFormField(
-                    initialValue: title,
-                    decoration: const InputDecoration(labelText: 'Project Title *'),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter title' : null,
-                    onSaved: (v) => title = v!.trim(),
-                  ),
-                  TextFormField(
-                    readOnly: true,
-                    controller: TextEditingController(text: '${started.year}-${started.month.toString().padLeft(2,'0')}-${started.day.toString().padLeft(2,'0')}'),
-                    decoration: const InputDecoration(labelText: 'Started Date *'),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: started,
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime(2100),
-                      );
-                      if (picked != null) {
-                        started = picked;
-                        (context as Element).markNeedsBuild();
-                      }
-                    },
-                  ),
-                  DropdownButtonFormField<String>(
-                    initialValue: priority,
-                    items: ['High', 'Medium', 'Low'].map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
-                    onChanged: (v) => priority = v ?? priority,
-                    decoration: const InputDecoration(labelText: 'Priority *'),
-                  ),
-                  DropdownButtonFormField<String>(
-                    initialValue: status,
-                    items: ['In Progress', 'Completed', 'Not Started'].map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
-                    onChanged: (v) => status = v ?? status,
-                    decoration: const InputDecoration(labelText: 'Status *'),
-                  ),
-                  DropdownButtonFormField<String>(
-                    initialValue: executor,
-                    items: _teamNames().map((n) => DropdownMenuItem(value: n, child: Text(n))).toList(),
-                    onChanged: (v) => executor = v,
-                    decoration: const InputDecoration(labelText: 'Executor (optional)'),
-                  ),
-                
-             
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-            ElevatedButton(
+        return Container(
+          width: 400,
+          height: 400,
+          child: Column(
+            children: [
+              TextFormField(
+                initialValue: title,
+                decoration: const InputDecoration(labelText: 'Project Title *'),
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Enter title' : null,
+                onSaved: (v) => title = v!.trim(),
+              ),
+              TextFormField(
+                readOnly: true,
+                controller: TextEditingController(
+                  text:
+                      '${started.year}-${started.month.toString().padLeft(2, '0')}-${started.day.toString().padLeft(2, '0')}',
+                ),
+                decoration: const InputDecoration(labelText: 'Started Date *'),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: started,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) {
+                    started = picked;
+                    (context as Element).markNeedsBuild();
+                  }
+                },
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: priority,
+                items: ['High', 'Medium', 'Low']
+                    .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                    .toList(),
+                onChanged: (v) => priority = v ?? priority,
+                decoration: const InputDecoration(labelText: 'Priority *'),
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: status,
+                items: ['In Progress', 'Completed', 'Not Started']
+                    .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                    .toList(),
+                onChanged: (v) => status = v ?? status,
+                decoration: const InputDecoration(labelText: 'Status *'),
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: executor,
+                items: _teamNames()
+                    .map((n) => DropdownMenuItem(value: n, child: Text(n)))
+                    .toList(),
+                onChanged: (v) => executor = v,
+                decoration: const InputDecoration(
+                  labelText: 'Executor (optional)',
+                ),
+              ),
+
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
                 onPressed: () {
                   if (formKey.currentState?.validate() ?? false) {
                     formKey.currentState?.save();
@@ -311,7 +505,9 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                       started: started,
                       priority: priority,
                       status: status,
-                      executor: (executor == null || executor?.isEmpty == true) ? null : executor,
+                      executor: (executor == null || executor?.isEmpty == true)
+                          ? null
+                          : executor,
                     );
                     _ctrl.updateProject(project.id, updated);
                     Navigator.of(context).pop();
@@ -319,8 +515,8 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                 },
                 child: const Text('Save'),
               ),
-                ]
-        )
+            ],
+          ),
         );
       },
     );
@@ -333,13 +529,205 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
         title: const Text('Delete Project'),
         content: Text('Are you sure you want to delete "${project.title}"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
     if (confirmed == true) {
       _ctrl.deleteProject(project.id);
     }
+  }
+
+  void _showProjectDetails(Project project, bool canStart) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: 600,
+          constraints: const BoxConstraints(maxHeight: 700),
+          padding: const EdgeInsets.all(32.0),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        project.title,
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _priorityChip(project.priority),
+                    const SizedBox(width: 8),
+                    _statusChip(project.status),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Description Section
+                Text(
+                  'Description',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  project.description ?? 'No description available',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
+                ),
+                const SizedBox(height: 24),
+
+                // Start Date Section
+                Text(
+                  'Scheduled Start Date',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.calendar_today,
+                      size: 18,
+                      color: Colors.grey,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${project.started.day}/${project.started.month}/${project.started.year}',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Executor Section (if exists)
+                if (project.executor != null) ...[
+                  Text(
+                    'Current Executor',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.person, size: 18, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      Text(
+                        project.executor!,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                ],
+
+                // Assigned Employees Section
+                Text(
+                  'Assigned Team Members',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (project.assignedEmployees?.isEmpty ?? true)
+                  Text(
+                    'No team members assigned',
+                    style: TextStyle(color: Colors.grey[600]),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: project.assignedEmployees!.map((employee) {
+                      return Chip(
+                        avatar: CircleAvatar(
+                          backgroundColor: Colors.blue[100],
+                          child: Text(
+                            employee[0].toUpperCase(),
+                            style: TextStyle(
+                              color: Colors.blue[900],
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        label: Text(employee),
+                        backgroundColor: Colors.grey[100],
+                      );
+                    }).toList(),
+                  ),
+                const SizedBox(height: 32),
+
+                // Start Project Button (only if canStart is true)
+                if (canStart)
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _startProject(project),
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Start Project'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _startProject(Project project) {
+    // Update project status to "In Progress" and set executor to current user
+    final updatedProject = project.copyWith(
+      status: 'In Progress',
+      executor: currentUser,
+    );
+
+    _ctrl.updateProject(project.id, updatedProject);
+
+    // Close the dialog
+    Navigator.of(context).pop();
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Project "${project.title}" has been started!'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 }
