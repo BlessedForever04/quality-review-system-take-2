@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:quality_review/components/admin_sidebar.dart';
 import 'package:quality_review/pages/admin_pages/admin_main_layout.dart';
-import 'package:quality_review/pages/employee_pages/employee_dashboard.dart';
 import 'package:quality_review/pages/employee_pages/employee_main_layoutl.dart';
-import '../main.dart' show MainLayout;
 
 // ---------- Controller using GetX ----------
 class LoginController extends GetxController {

@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:quality_review/pages/employee_pages/employee_dashboard.dart';
 import 'package:quality_review/pages/login.dart';
-
-import 'pages/admin_pages/team_page.dart';
-import 'components/admin_sidebar.dart';
-import 'pages/admin_pages/admin_dashboard_page.dart';
 
 void main() {
   runApp(const MyApp());
