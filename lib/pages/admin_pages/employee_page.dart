@@ -4,14 +4,14 @@ import 'package:get/get.dart';
 import '../../controllers/team_controller.dart';
 import '../../models/team_member.dart';
 
-class TeamPage extends StatefulWidget {
-  const TeamPage({super.key});
+class EmployeePage extends StatefulWidget {
+  const EmployeePage({super.key});
 
   @override
-  State<TeamPage> createState() => _TeamPageState();
+  State<EmployeePage> createState() => _TeamPageState();
 }
 
-class _TeamPageState extends State<TeamPage> {
+class _TeamPageState extends State<EmployeePage> {
   late final TeamController _ctrl;
   int? _sortColumnIndex;
   bool _sortAscending = true;

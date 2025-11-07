@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:quality_review/components/admin_sidebar.dart';
 import 'package:quality_review/pages/admin_pages/admin_dashboard_page.dart';
-import 'package:quality_review/pages/admin_pages/team_page.dart';
+import 'package:quality_review/pages/admin_pages/employee_page.dart';
 
 class AdminMainLayout extends StatefulWidget {
   const AdminMainLayout({super.key});
@@ -14,7 +14,7 @@ class AdminMainLayout extends StatefulWidget {
 class _AdminMainLayoutState extends State<AdminMainLayout> {
   int selectedIndex = 0;
 
-  final pages = [AdminDashboardPage(), TeamPage()];
+  final pages = [AdminDashboardPage(), EmployeePage()];
 
   @override
   Widget build(BuildContext context) {
