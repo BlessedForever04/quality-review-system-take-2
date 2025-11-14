@@ -9,17 +9,7 @@ import '../../components/admin_dialog.dart';
 class EmployeePage extends StatelessWidget {
   const EmployeePage({super.key});
 
-  void _ensureSeed(TeamController ctrl) {
-    if (ctrl.members.isEmpty) {
-      ctrl.loadInitial([
-        TeamMember(id: 't1', name: 'Emma Carter', email: 'emma.carter@example.com', role: 'Team Leader', status: 'Active', dateAdded: '2023-08-15', lastActive: '2024-05-20'),
-        TeamMember(id: 't2', name: 'Liam Walker', email: 'liam.walker@example.com', role: 'Member', status: 'Active', dateAdded: '2023-09-22', lastActive: '2024-05-21'),
-        TeamMember(id: 't3', name: 'Olivia Harris', email: 'olivia.harris@example.com', role: 'Reviewer', status: 'Inactive', dateAdded: '2023-10-10', lastActive: '2024-04-30'),
-        TeamMember(id: 't4', name: 'Noah Clark', email: 'noah.clark@example.com', role: 'Member', status: 'Active', dateAdded: '2023-11-05', lastActive: '2024-05-19'),
-        TeamMember(id: 't5', name: 'Ava Lewis', email: 'ava.lewis@example.com', role: 'Team Leader', status: 'Pending', dateAdded: '2023-12-18', lastActive: 'Never'),
-      ]);
-    }
-  }
+  void _ensureSeed(TeamController ctrl) {}
 
   Widget _roleChip(String text) {
     return Chip(
@@ -126,7 +116,7 @@ class EmployeePage extends StatelessWidget {
                         lastActive: 'Never',
                         password: password,
                       );
-                      ctrl.addMember(newMember);
+                      ctrl.createMember(newMember);
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Member added')));
                     }
@@ -231,7 +221,7 @@ class EmployeePage extends StatelessWidget {
                     if (formKey.currentState?.validate() ?? false) {
                       formKey.currentState?.save();
                       final updated = m.copyWith(name: name, email: email, role: role, password: password);
-                      ctrl.updateMember(m.id, updated);
+                      ctrl.saveMember(updated);
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Member updated')));
                     }
@@ -271,13 +261,15 @@ class EmployeePage extends StatelessWidget {
         ],
       ),
     );
-    if (confirmed == true) ctrl.deleteMember(m.id);
+    if (confirmed == true) {
+      await ctrl.removeMember(m.id);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final ctrl = Get.find<TeamController>();
-    _ensureSeed(ctrl);
+  _ensureSeed(ctrl);
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Row(

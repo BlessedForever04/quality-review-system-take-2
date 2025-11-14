@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:quality_review/pages/admin_pages/admin_main_layout.dart';
 import 'package:quality_review/pages/employee_pages/employee_main_layoutl.dart';
+import '../controllers/auth_controller.dart';
 
 // ---------- Controller using GetX ----------
 class LoginController extends GetxController {
@@ -24,20 +25,19 @@ class LoginController extends GetxController {
     }
 
     isLoading.value = true;
-    await Future.delayed(const Duration(seconds: 1)); // mock delay
-    isLoading.value = false;
-
-    // ---- Simulated roles (replace with API later if needed) ----
-    if (email == "admin@gmail.com" && password == "adminadmin") {
-      Get.off(() =>  AdminMainLayout());
-    } else if (email == "employee@gmail.com" && password == "employee") {
-      Get.off(() => EmployeeMainLayout());
-    } else {
+    try {
+      final auth = Get.put(AuthController());
+      final user = await auth.login(email, password);
+      final isAdmin = user.role.toLowerCase() == 'admin';
+      Get.off(() => isAdmin ? AdminMainLayout() : EmployeeMainLayout());
+    } catch (e) {
       Get.snackbar(
-        "Login Failed",
-        "Invalid email or password",
+        'Login Failed',
+        e.toString(),
         snackPosition: SnackPosition.BOTTOM,
       );
+    } finally {
+      isLoading.value = false;
     }
   }
 }

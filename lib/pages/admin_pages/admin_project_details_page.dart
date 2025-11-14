@@ -3,7 +3,6 @@ import 'package:get/get.dart';
 import '../../models/project.dart';
 import '../../controllers/projects_controller.dart';
 import '../../controllers/team_controller.dart';
-import '../../models/team_member.dart';
 import '../../components/admin_dialog.dart';
 import '../../controllers/project_details_controller.dart';
 
@@ -14,15 +13,6 @@ class AdminProjectDetailsPage extends StatelessWidget {
   AdminProjectDetailsPage({super.key, required this.project, this.descriptionOverride}) {
     final details = Get.put(ProjectDetailsController(), tag: project.id, permanent: false);
     details.seed(project);
-    // Optional seed employees if empty (demo only)
-    final team = Get.find<TeamController>();
-    if (team.members.isEmpty) {
-      team.loadInitial([
-        TeamMember(id: 't1', name: 'Emma Carter', email: 'emma.carter@example.com', role: 'Team Leader', status: 'Active', dateAdded: '2023-08-15', lastActive: '2024-05-20'),
-        TeamMember(id: 't2', name: 'Liam Walker', email: 'liam.walker@example.com', role: 'Member', status: 'Active', dateAdded: '2023-09-22', lastActive: '2024-05-21'),
-        TeamMember(id: 't3', name: 'Olivia Harris', email: 'olivia.harris@example.com', role: 'Reviewer', status: 'Inactive', dateAdded: '2023-10-10', lastActive: '2024-04-30'),
-      ]);
-    }
   }
 
   ProjectsController get _projectsCtrl => Get.find<ProjectsController>();
@@ -296,7 +286,7 @@ class AdminProjectDetailsPage extends StatelessWidget {
                         executor: (executor == null || executor!.isEmpty) ? null : executor,
                         description: description,
                       );
-                      _projectsCtrl.updateProject(updated.id, updated);
+                      _projectsCtrl.saveProjectRemote(updated);
                       detailsCtrl.updateMeta(
                         title: updated.title,
                         started: updated.started,
@@ -337,8 +327,8 @@ class AdminProjectDetailsPage extends StatelessWidget {
               const SizedBox(width: 12),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-                onPressed: () {
-                  _projectsCtrl.deleteProject(detailsCtrl.project.id);
+                onPressed: () async {
+                  await _projectsCtrl.removeProjectRemote(detailsCtrl.project.id);
                   Navigator.of(context).pop();
                   Get.back();
                   Get.snackbar('Deleted', 'Project has been deleted', snackPosition: SnackPosition.BOTTOM);

@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 import '../models/project.dart';
+import '../services/project_service.dart';
 
 class ProjectsController extends GetxController {
   final RxList<Project> projects = <Project>[].obs;
@@ -7,6 +8,15 @@ class ProjectsController extends GetxController {
   final RxString errorMessage = ''.obs;
 
   List<Project> get all => projects;
+  late final ProjectService _service;
+
+  @override
+  void onInit() {
+    super.onInit();
+    _service = Get.find<ProjectService>();
+    // Load from backend on startup
+    fetchFromBackend(() => _service.getAll());
+  }
 
   // Find projects where a given employee name is executor
   List<Project> byExecutor(String name) =>
@@ -43,6 +53,7 @@ class ProjectsController extends GetxController {
   }
 
   void addProject(Project p) {
+  // optimistic update; backend create can be added later
     projects.add(_normalize(p));
   }
 
@@ -66,5 +77,37 @@ class ProjectsController extends GetxController {
 
   void deleteProject(String id) {
     projects.removeWhere((e) => e.id == id);
+  }
+
+  Future<void> removeProjectRemote(String id) async {
+    try {
+      await _service.delete(id);
+      deleteProject(id);
+    } catch (e) {
+      errorMessage.value = e.toString();
+      rethrow;
+    }
+  }
+
+  Future<Project> createProjectRemote(Project p) async {
+    try {
+      final created = await _service.create(p);
+      addProject(created);
+      return created;
+    } catch (e) {
+      errorMessage.value = e.toString();
+      rethrow;
+    }
+  }
+
+  Future<Project> saveProjectRemote(Project p) async {
+    try {
+      final saved = await _service.update(p);
+      updateProject(saved.id, saved);
+      return saved;
+    } catch (e) {
+      errorMessage.value = e.toString();
+      rethrow;
+    }
   }
 }

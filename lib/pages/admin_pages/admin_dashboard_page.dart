@@ -53,22 +53,13 @@ class AdminDashboardPage extends StatelessWidget {
     return list;
   }
 
-  void _ensureSeed(ProjectsController ctrl) {
-    if (ctrl.projects.isEmpty) {
-      ctrl.loadInitial([
-        Project(id: 'p1', title: 'Implement New CRM System', started: DateTime(2024, 6, 1), priority: 'High', status: 'In Progress', executor: 'Emily Carter'),
-        Project(id: 'p2', title: 'Develop Marketing Strategy', started: DateTime(2024, 5, 20), priority: 'Medium', status: 'Completed', executor: 'David Lee'),
-        Project(id: 'p3', title: 'Conduct Market Research', started: DateTime(2024, 6, 10), priority: 'Low', status: 'Not Started', executor: null),
-        Project(id: 'p4', title: 'Build Analytics Dashboard', started: DateTime(2024, 5, 5), priority: 'High', status: 'In Progress', executor: 'Sophia Clark'),
-      ]);
-    }
-  }
+  void _ensureSeed(ProjectsController ctrl) {}
 
   @override
   Widget build(BuildContext context) {
   final projCtrl = Get.find<ProjectsController>();
   final ui = Get.find<AdminDashboardUIController>();
-    _ensureSeed(projCtrl);
+  _ensureSeed(projCtrl);
 
     List<String> _executors() => const [
     'Emma Carter',
@@ -97,9 +88,9 @@ class AdminDashboardPage extends StatelessWidget {
           width: 1000,
           showStatus: false,
           showExecutor: false,
-          onSubmit: (data) {
+          onSubmit: (data) async {
             final newProject = Project(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              id: '',
               title: data.title,
               description: data.description,
               started: data.started,
@@ -107,7 +98,7 @@ class AdminDashboardPage extends StatelessWidget {
               status: 'Not Started',
               executor: null,
             );
-            projCtrl.addProject(newProject);
+            await projCtrl.createProjectRemote(newProject);
           },
         ),
       );
