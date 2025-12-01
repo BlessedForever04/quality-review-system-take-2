@@ -14,7 +14,10 @@ class ProjectDetailsController extends GetxController {
       status: 'Not Started',
     ),
   );
-  final RxSet<String> selectedMemberIds = <String>{}.obs;
+  final RxSet<String> selectedMemberIds = <String>{}.obs; // union of all roles
+  final RxSet<String> teamLeaderIds = <String>{}.obs;
+  final RxSet<String> executorIds = <String>{}.obs;
+  final RxSet<String> reviewerIds = <String>{}.obs;
 
   Project get project => _project.value;
   String get description => project.description ?? '';
@@ -30,6 +33,10 @@ class ProjectDetailsController extends GetxController {
         ..clear()
         ..addAll(p.assignedEmployees!);
     }
+    // Clear role specific sets; they will be hydrated separately via memberships
+    teamLeaderIds.clear();
+    executorIds.clear();
+    reviewerIds.clear();
   }
 
   void toggleMember(String id, bool value) {
@@ -66,5 +73,58 @@ class ProjectDetailsController extends GetxController {
       description: description ?? current.description,
       assignedEmployees: selectedMemberIds.toList(),
     );
+  }
+
+  /// Populate role-specific selections from project membership list
+  void seedMemberships(Iterable<dynamic> memberships) {
+    // Expect objects that expose roleName and userId
+    teamLeaderIds.clear();
+    executorIds.clear();
+    reviewerIds.clear();
+    for (final m in memberships) {
+      try {
+        final roleName = (m.roleName ?? '').toString().trim().toLowerCase();
+        final userId = (m.userId).toString();
+        if (userId.isEmpty) continue;
+        if (roleName == 'team leader' || roleName == 'sdh') {
+          teamLeaderIds.add(userId);
+        } else if (roleName == 'executor') {
+          executorIds.add(userId);
+        } else if (roleName == 'reviewer') {
+          reviewerIds.add(userId);
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+    // Maintain union for legacy fields
+    selectedMemberIds
+      ..clear()
+      ..addAll(teamLeaderIds)
+      ..addAll(executorIds)
+      ..addAll(reviewerIds);
+  }
+
+  void toggleTeamLeader(String id, bool value) {
+    value ? teamLeaderIds.add(id) : teamLeaderIds.remove(id);
+    _rebuildUnion();
+  }
+
+  void toggleExecutor(String id, bool value) {
+    value ? executorIds.add(id) : executorIds.remove(id);
+    _rebuildUnion();
+  }
+
+  void toggleReviewer(String id, bool value) {
+    value ? reviewerIds.add(id) : reviewerIds.remove(id);
+    _rebuildUnion();
+  }
+
+  void _rebuildUnion() {
+    selectedMemberIds
+      ..clear()
+      ..addAll(teamLeaderIds)
+      ..addAll(executorIds)
+      ..addAll(reviewerIds);
   }
 }

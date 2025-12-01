@@ -25,5 +25,5 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// mail : admin@gmail.com
+// email : admin@gmail.com
 // pass : admin1

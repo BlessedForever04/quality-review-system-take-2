@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../models/project.dart';
@@ -20,12 +21,14 @@ class _MyprojectState extends State<Myproject> {
   int? _hoverIndex;
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
+  // Cached visible projects to avoid flicker/disappear on hover state changes
+  List<Project> _currentProjects = [];
+  StreamSubscription? _projectsSub;
+  // Stable snapshot to avoid transient empty flicker during hydration
+  List<Project> _stableProjects = [];
+  Timer? _debounceTimer;
 
-  // Cache to prevent reactive loops
-  List<Project> _cachedMyProjects = [];
-  String? _lastUserId;
-
-  // Removed legacy fallback user; rely solely on AuthController.
+  // Removed legacy caching fields (_cachedMyProjects, _lastUserId) no longer needed.
 
   @override
   void initState() {
@@ -42,14 +45,42 @@ class _MyprojectState extends State<Myproject> {
       await _ctrl.refreshProjects();
       // Rebuild once after hydration
       if (mounted) {
-        setState(() {});
+        setState(() {
+          _currentProjects = _visibleProjects();
+        });
       }
+      // Listen for project list changes (including assignment hydration) and recompute
+      _projectsSub = _ctrl.projects.listen((_) {
+        if (!mounted) return;
+        _debounceTimer?.cancel();
+        _debounceTimer = Timer(const Duration(milliseconds: 120), () {
+          if (!mounted) return;
+          final loading = _ctrl.isLoading.value;
+          final next = _visibleProjects();
+          final sourceHasData = _ctrl.projects.isNotEmpty;
+          final transientEmpty =
+              loading &&
+              sourceHasData &&
+              _stableProjects.isNotEmpty &&
+              next.isEmpty;
+          setState(() {
+            if (transientEmpty) {
+              _currentProjects = _stableProjects;
+            } else {
+              _currentProjects = next;
+              _stableProjects = next;
+            }
+          });
+        });
+      });
     });
   }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _projectsSub?.cancel();
+    _debounceTimer?.cancel();
     super.dispose();
   }
 
@@ -67,46 +98,13 @@ class _MyprojectState extends State<Myproject> {
     final auth = Get.isRegistered<AuthController>()
         ? Get.find<AuthController>()
         : null;
-    final userId = auth?.currentUser.value?.id;
-    final userName = auth?.currentUser.value?.name;
-    final userEmail = auth?.currentUser.value?.email;
-
-    // ignore: avoid_print
-    print('[MyProjects] Filtering for userId=$userId userName=$userName');
-
-    if (userId == null && userName == null) return const [];
+    final userId = auth?.currentUser.value?.id?.trim();
+    if (userId == null || userId.isEmpty) return const [];
 
     final matched = _ctrl.projects.where((p) {
       final assigned = p.assignedEmployees ?? const [];
-
-      // ignore: avoid_print
-      print('[MyProjects] Project "${p.title}" assignedEmployees=$assigned');
-
-      final matchId =
-          userId != null && assigned.any((e) => e.trim() == userId.trim());
-      final matchName =
-          userName != null &&
-          ((p.executor?.trim() == userName.trim()) ||
-              assigned.any(
-                (e) => e.trim().toLowerCase() == userName.trim().toLowerCase(),
-              ));
-      final matchEmail =
-          userEmail != null &&
-          assigned.any(
-            (e) => e.trim().toLowerCase() == userEmail.trim().toLowerCase(),
-          );
-
-      final matches = matchId || matchName || matchEmail;
-
-      // ignore: avoid_print
-      if (matches) print('[MyProjects] ✓ Matched project "${p.title}"');
-
-      return matches;
+      return assigned.any((e) => e.trim() == userId);
     }).toList();
-
-    // ignore: avoid_print
-    print('[MyProjects] Total matched projects: ${matched.length}');
-
     return matched;
   }
 
@@ -201,6 +199,8 @@ class _MyprojectState extends State<Myproject> {
         _sortKey = key;
         _ascending = true;
       }
+      // Recompute projects only when sort changes, not on hover
+      _currentProjects = _visibleProjects();
     });
   }
 
@@ -265,7 +265,13 @@ class _MyprojectState extends State<Myproject> {
                       vertical: 14,
                     ),
                   ),
-                  onChanged: (v) => setState(() => _searchQuery = v),
+                  onChanged: (v) => setState(() {
+                    _searchQuery = v;
+                    final next = _visibleProjects();
+                    _currentProjects = next;
+                    _stableProjects =
+                        next; // search defines a new stable subset
+                  }),
                 ),
               ),
               const SizedBox(height: 16),
@@ -285,7 +291,11 @@ class _MyprojectState extends State<Myproject> {
                   padding: const EdgeInsets.all(8.0),
                   child: Builder(
                     builder: (context) {
-                      final projects = _visibleProjects();
+                      final projects = _stableProjects.isNotEmpty
+                          ? _stableProjects
+                          : (_currentProjects.isNotEmpty
+                                ? _currentProjects
+                                : _visibleProjects());
                       final auth = Get.isRegistered<AuthController>()
                           ? Get.find<AuthController>()
                           : null;
@@ -426,10 +436,16 @@ class _MyprojectState extends State<Myproject> {
                               final proj = projects[index];
                               final hovered = _hoverIndex == index;
                               return MouseRegion(
-                                onEnter: (_) =>
-                                    setState(() => _hoverIndex = index),
-                                onExit: (_) =>
-                                    setState(() => _hoverIndex = null),
+                                onEnter: (_) {
+                                  if (_hoverIndex != index) {
+                                    setState(() => _hoverIndex = index);
+                                  }
+                                },
+                                onExit: (_) {
+                                  if (_hoverIndex != null) {
+                                    setState(() => _hoverIndex = null);
+                                  }
+                                },
                                 child: GestureDetector(
                                   onTap: () => _openProjectDetails(proj),
                                   child: AnimatedContainer(

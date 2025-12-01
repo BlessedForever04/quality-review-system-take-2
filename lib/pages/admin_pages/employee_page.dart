@@ -464,102 +464,131 @@ class EmployeePage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Card(
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Obx(() {
-                          final list = ctrl.filtered;
-                          return DataTable(
-                            columnSpacing: 24,
-                            sortAscending: true,
-                            sortColumnIndex: 0,
-                            columns: [
-                              DataColumn(
-                                label: const Text('User'),
-                                onSort: (colIndex, asc) {
-                                  final sorted = ctrl.members.toList()
-                                    ..sort(
-                                      (a, b) => asc
-                                          ? a.name.compareTo(b.name)
-                                          : b.name.compareTo(a.name),
-                                    );
-                                  ctrl.members.assignAll(sorted);
-                                },
-                              ),
-                              const DataColumn(label: Text('Email')),
-                              const DataColumn(label: Text('Role')),
-                              // Password column removed per requirement
-                              DataColumn(
-                                label: const Text('Added on Date/Time'),
-                                onSort: (colIndex, asc) {
-                                  final sorted = ctrl.members.toList()
-                                    ..sort(
-                                      (a, b) => asc
-                                          ? a.dateAdded.compareTo(b.dateAdded)
-                                          : b.dateAdded.compareTo(a.dateAdded),
-                                    );
-                                  ctrl.members.assignAll(sorted);
-                                },
-                              ),
-                              // Last Active column removed per requirement
-                              const DataColumn(label: Text('Actions')),
-                            ],
-                            rows: list.map((e) {
-                              return DataRow(
-                                cells: [
-                                  DataCell(
-                                    Row(
-                                      children: [
-                                        CircleAvatar(
-                                          radius: 18,
-                                          child: Text(e.name[0]),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Text(e.name),
-                                      ],
-                                    ),
-                                    onTap: () => Get.to(
-                                      () => EmployeeProjectsPage(member: e),
-                                    ),
+                  // Full-width card with DataTable; constrain minimum width of table to available width
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SizedBox(
+                        width: double.infinity,
+                        child: Card(
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Obx(() {
+                              final list = ctrl.filtered;
+                              return SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    minWidth:
+                                        constraints.maxWidth -
+                                        32, // account for padding
                                   ),
-                                  DataCell(Text(e.email)),
-                                  DataCell(_roleChip(e.role)),
-                                  DataCell(Text(_formatDateTime(e.dateAdded))),
-                                  DataCell(
-                                    Row(
-                                      children: [
-                                        IconButton(
-                                          onPressed: () =>
-                                              _showEditDialog(context, ctrl, e),
-                                          icon: const Icon(
-                                            Icons.edit,
-                                            size: 20,
+                                  child: DataTable(
+                                    columnSpacing: 24,
+                                    sortAscending: true,
+                                    sortColumnIndex: 0,
+                                    columns: [
+                                      DataColumn(
+                                        label: const Text('User'),
+                                        onSort: (colIndex, asc) {
+                                          final sorted = ctrl.members.toList()
+                                            ..sort(
+                                              (a, b) => asc
+                                                  ? a.name.compareTo(b.name)
+                                                  : b.name.compareTo(a.name),
+                                            );
+                                          ctrl.members.assignAll(sorted);
+                                        },
+                                      ),
+                                      const DataColumn(label: Text('Email')),
+                                      const DataColumn(label: Text('Role')),
+                                      DataColumn(
+                                        label: const Text('Added on Date/Time'),
+                                        onSort: (colIndex, asc) {
+                                          final sorted = ctrl.members.toList()
+                                            ..sort(
+                                              (a, b) => asc
+                                                  ? a.dateAdded.compareTo(
+                                                      b.dateAdded,
+                                                    )
+                                                  : b.dateAdded.compareTo(
+                                                      a.dateAdded,
+                                                    ),
+                                            );
+                                          ctrl.members.assignAll(sorted);
+                                        },
+                                      ),
+                                      const DataColumn(label: Text('Actions')),
+                                    ],
+                                    rows: list.map((e) {
+                                      return DataRow(
+                                        cells: [
+                                          DataCell(
+                                            Row(
+                                              children: [
+                                                CircleAvatar(
+                                                  radius: 18,
+                                                  child: Text(e.name[0]),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Text(e.name),
+                                              ],
+                                            ),
+                                            onTap: () => Get.to(
+                                              () => EmployeeProjectsPage(
+                                                member: e,
+                                              ),
+                                            ),
                                           ),
-                                        ),
-                                        IconButton(
-                                          onPressed: () =>
-                                              _confirmDelete(context, ctrl, e),
-                                          icon: const Icon(
-                                            Icons.delete_outline,
-                                            size: 20,
+                                          DataCell(Text(e.email)),
+                                          DataCell(_roleChip(e.role)),
+                                          DataCell(
+                                            Text(_formatDateTime(e.dateAdded)),
                                           ),
-                                        ),
-                                      ],
-                                    ),
+                                          DataCell(
+                                            Row(
+                                              children: [
+                                                IconButton(
+                                                  onPressed: () =>
+                                                      _showEditDialog(
+                                                        context,
+                                                        ctrl,
+                                                        e,
+                                                      ),
+                                                  icon: const Icon(
+                                                    Icons.edit,
+                                                    size: 20,
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  onPressed: () =>
+                                                      _confirmDelete(
+                                                        context,
+                                                        ctrl,
+                                                        e,
+                                                      ),
+                                                  icon: const Icon(
+                                                    Icons.delete_outline,
+                                                    size: 20,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    }).toList(),
                                   ),
-                                ],
+                                ),
                               );
-                            }).toList(),
-                          );
-                        }),
-                      ),
-                    ),
+                            }),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
