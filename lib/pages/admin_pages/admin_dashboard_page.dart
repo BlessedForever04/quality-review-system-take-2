@@ -7,6 +7,8 @@ import '../../controllers/admin_dashboard_ui_controller.dart';
 import '../../components/admin_dialog.dart';
 import 'admin_project_details_page.dart';
 import '../../controllers/team_controller.dart';
+import 'package:file_picker/file_picker.dart';
+import '../../services/excel_import_service.dart';
 
 class AdminDashboardPage extends StatelessWidget {
   const AdminDashboardPage({super.key});
@@ -144,12 +146,12 @@ class AdminDashboardPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     'Welcome Back!',
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
+                  Spacer(),
                   ElevatedButton.icon(
                     onPressed: showCreateDialog,
                     icon: const Icon(Icons.add),
@@ -160,6 +162,76 @@ class AdminDashboardPage extends StatelessWidget {
                         vertical: 12,
                       ),
                     ),
+                  ),
+                  const SizedBox(width: 12),
+                  
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final res = await FilePicker.platform.pickFiles(
+                        type: FileType.custom,
+                        allowedExtensions: const ['xlsx', 'xlsm', 'xls'],
+                        withData: true,
+                      );
+                      if (res == null || res.files.isEmpty) return;
+                      final bytes = res.files.first.bytes;
+                      if (bytes == null) return;
+                      final importer = ExcelImportService();
+                      final projects = importer.parse(bytes);
+
+                      // Build existing uniqueness index: projectNo, internalOrderNo, title
+                      final existingKeys = <String>{};
+                      String _norm(String s) => s.trim().toLowerCase();
+                      void _addKeys(Project p) {
+                        final t = _norm(p.title);
+                        if (t.isNotEmpty) existingKeys.add('title:$t');
+                        final pn = (p.projectNo ?? '').trim();
+                        if (pn.isNotEmpty) existingKeys.add('no:${_norm(pn)}');
+                        final io = (p.internalOrderNo ?? '').trim();
+                        if (io.isNotEmpty) existingKeys.add('io:${_norm(io)}');
+                      }
+                      for (final p in projCtrl.projects) {
+                        _addKeys(p);
+                      }
+
+                      // Track duplicates within the same import batch as well
+                      final seenImportKeys = <String>{};
+                      int imported = 0;
+                      int skipped = 0;
+
+                      for (final p in projects) {
+                        final keys = <String>{};
+                        final t = _norm(p.title);
+                        if (t.isNotEmpty) keys.add('title:$t');
+                        final pn = (p.projectNo ?? '').trim();
+                        if (pn.isNotEmpty) keys.add('no:${_norm(pn)}');
+                        final io = (p.internalOrderNo ?? '').trim();
+                        if (io.isNotEmpty) keys.add('io:${_norm(io)}');
+
+                        final isDup = keys.any(
+                          (k) => existingKeys.contains(k) || seenImportKeys.contains(k),
+                        );
+                        if (isDup) {
+                          skipped++;
+                          continue;
+                        }
+                        try {
+                          await projCtrl.createProjectRemote(p);
+                          imported++;
+                          seenImportKeys.addAll(keys);
+                        } catch (e) {
+                          // ignore per-item errors but don't count as imported
+                        }
+                      }
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Imported $imported, skipped $skipped duplicate(s).'),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.file_upload),
+                    label: const Text('Import from Excel'),
                   ),
                 ],
               ),
