@@ -28,7 +28,7 @@ class MyProjectDetailPage extends StatelessWidget {
         child: ProjectDetailInfo(
           project: project,
           descriptionOverride: description ?? project.description,
-          showAssignedEmployees: true,
+          showAssignedEmployees: false,
         ),
       ),
     );

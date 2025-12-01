@@ -576,7 +576,7 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
       }
 
       await apply(
-        leaderRoleId!,
+        leaderRoleId,
         'team leader',
         widget.details.teamLeaderIds.toSet(),
       );
@@ -764,7 +764,7 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.save),
-          label: Text(_saving ? 'Saving...' : 'Save All Assignments'),
+          label: Text(_saving ? 'Saving...' : 'Save changes'),
         ),
         const SizedBox(width: 12),
         TextButton(

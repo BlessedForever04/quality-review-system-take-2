@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import '../controllers/auth_controller.dart';
 
 class AdminSidebar extends StatelessWidget {
   final void Function()? onCreate;
@@ -45,8 +47,18 @@ class AdminSidebar extends StatelessWidget {
           const SizedBox(height: 32),
 
           // Nav items
-          SidebarItem(icon: Icons.dashboard, label: "Dashboard", active: selectedIndex == 0, onTap: () => onItemSelected?.call(0)),
-          SidebarItem(icon: Icons.group, label: "Employees", active: selectedIndex == 1, onTap: () => onItemSelected?.call(1)),
+          SidebarItem(
+            icon: Icons.dashboard,
+            label: "Dashboard",
+            active: selectedIndex == 0,
+            onTap: () => onItemSelected?.call(0),
+          ),
+          SidebarItem(
+            icon: Icons.group,
+            label: "Employees",
+            active: selectedIndex == 1,
+            onTap: () => onItemSelected?.call(1),
+          ),
           const Spacer(),
 
           const SizedBox(height: 16),
@@ -55,25 +67,36 @@ class AdminSidebar extends StatelessWidget {
           const SizedBox(height: 12),
 
           // Profile
-          Row(
-            children: [
-              const CircleAvatar(radius: 20, child: Icon(Icons.person)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
-                      "Alex Hartman",
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text("Manager", style: TextStyle(color: Colors.grey)),
-                  ],
+          Obx(() {
+            final authCtrl = Get.find<AuthController>();
+            final user = authCtrl.currentUser.value;
+            final name = user?.name ?? 'User';
+            final role = user?.role ?? 'admin';
+            final displayRole = role == 'admin' ? 'Admin' : 'Employee';
+
+            return Row(
+              children: [
+                const CircleAvatar(radius: 20, child: Icon(Icons.person)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        displayRole,
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            );
+          }),
         ],
       ),
     );
