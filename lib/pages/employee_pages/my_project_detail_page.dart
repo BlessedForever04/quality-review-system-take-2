@@ -6,6 +6,8 @@ import '../../models/project_membership.dart';
 import '../../components/project_detail_info.dart';
 import '../../services/project_membership_service.dart';
 import '../../controllers/team_controller.dart';
+import '../../controllers/auth_controller.dart';
+import '../../controllers/projects_controller.dart';
 
 class MyProjectDetailPage extends StatefulWidget {
   final Project project;
@@ -25,10 +27,13 @@ class _MyProjectDetailPageState extends State<MyProjectDetailPage> {
   List<ProjectMembership> _teamLeaders = [];
   List<ProjectMembership> _executors = [];
   List<ProjectMembership> _reviewers = [];
+  late Project _project; // local mutable copy
+  bool _starting = false;
 
   @override
   void initState() {
     super.initState();
+    _project = widget.project; // initialize local copy
     _loadAssignments();
   }
 
@@ -75,7 +80,7 @@ class _MyProjectDetailPageState extends State<MyProjectDetailPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.project.title),
+        title: Text(_project.title),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Get.back(),
@@ -87,9 +92,8 @@ class _MyProjectDetailPageState extends State<MyProjectDetailPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ProjectDetailInfo(
-              project: widget.project,
-              descriptionOverride:
-                  widget.description ?? widget.project.description,
+              project: _project,
+              descriptionOverride: widget.description ?? _project.description,
               showAssignedEmployees: false,
             ),
             const SizedBox(height: 24),
@@ -106,6 +110,8 @@ class _MyProjectDetailPageState extends State<MyProjectDetailPage> {
                     ),
                   )
                 : _buildAssignedEmployeesSection(),
+            const SizedBox(height: 32),
+            if (_showStartButton()) _buildStartButton(),
           ],
         ),
       ),
@@ -232,5 +238,160 @@ class _MyProjectDetailPageState extends State<MyProjectDetailPage> {
         ),
       ),
     );
+  }
+
+  bool _showStartButton() {
+    // Hide if assignments still loading
+    if (_isLoadingAssignments) return false;
+    // Must not already be in progress or completed
+    final statusLower = _project.status.toLowerCase();
+    if (statusLower == 'in progress' || statusLower == 'completed')
+      return false;
+    // Current user must be an executor
+    if (!Get.isRegistered<AuthController>()) return false;
+    final auth = Get.find<AuthController>();
+    final userId = auth.currentUser.value?.id;
+    if (userId == null) return false;
+    final isExecutor = _executors.any((m) => m.userId == userId);
+    // Fallback: if executors list empty (membership not hydrated yet) but user is in assignedEmployees
+    final assignedContainsUser = (_project.assignedEmployees ?? []).contains(
+      userId,
+    );
+    final fallback = assignedContainsUser && _executors.isEmpty;
+    // Debug trace
+    // ignore: avoid_print
+    print(
+      '[MyProjectDetailPage] _showStartButton status=${_project.status} executors=${_executors.length} userId=$userId isExecutor=$isExecutor assignedContainsUser=$assignedContainsUser fallback=$fallback',
+    );
+    return isExecutor || fallback;
+  }
+
+  Widget _buildStartButton() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ElevatedButton.icon(
+        onPressed: _starting ? null : _confirmStart,
+        icon: _starting
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.play_arrow),
+        label: Text(_starting ? 'Starting...' : 'Start Project'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.green.shade600,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        ),
+      ),
+    );
+  }
+
+  void _confirmStart() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.play_circle_fill, color: Colors.green, size: 28),
+            SizedBox(width: 8),
+            Text('Start Project'),
+          ],
+        ),
+        content: const Padding(
+          padding: EdgeInsets.only(top: 4.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Do you want to start this project now?',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+              ),
+              SizedBox(height: 12),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Color(0xFFE8F5E9),
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.all(12.0),
+                  child: Text(
+                    'Starting signals that work has begun. You can no longer use the start button afterward.',
+                    style: TextStyle(fontSize: 13, color: Colors.black87),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.grey.shade700,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green.shade600,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _startProject();
+            },
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Start'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startProject() async {
+    if (!Get.isRegistered<ProjectsController>()) return;
+    setState(() => _starting = true);
+    final projectsCtrl = Get.find<ProjectsController>();
+    final original = _project;
+    final updated = _project.copyWith(
+      started: DateTime.now(),
+      status: 'In Progress',
+    );
+    try {
+      final saved = await projectsCtrl.saveProjectRemote(updated);
+      setState(() {
+        _project = saved;
+        _starting = false;
+      });
+      // Feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Project started'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _project = original; // rollback
+        _starting = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to start project: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
