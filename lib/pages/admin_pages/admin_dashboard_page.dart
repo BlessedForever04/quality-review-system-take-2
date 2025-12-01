@@ -177,19 +177,55 @@ class AdminDashboardPage extends StatelessWidget {
                       if (bytes == null) return;
                       final importer = ExcelImportService();
                       final projects = importer.parse(bytes);
+
+                      // Build existing uniqueness index: projectNo, internalOrderNo, title
+                      final existingKeys = <String>{};
+                      String _norm(String s) => s.trim().toLowerCase();
+                      void _addKeys(Project p) {
+                        final t = _norm(p.title);
+                        if (t.isNotEmpty) existingKeys.add('title:$t');
+                        final pn = (p.projectNo ?? '').trim();
+                        if (pn.isNotEmpty) existingKeys.add('no:${_norm(pn)}');
+                        final io = (p.internalOrderNo ?? '').trim();
+                        if (io.isNotEmpty) existingKeys.add('io:${_norm(io)}');
+                      }
+                      for (final p in projCtrl.projects) {
+                        _addKeys(p);
+                      }
+
+                      // Track duplicates within the same import batch as well
+                      final seenImportKeys = <String>{};
+                      int imported = 0;
+                      int skipped = 0;
+
                       for (final p in projects) {
+                        final keys = <String>{};
+                        final t = _norm(p.title);
+                        if (t.isNotEmpty) keys.add('title:$t');
+                        final pn = (p.projectNo ?? '').trim();
+                        if (pn.isNotEmpty) keys.add('no:${_norm(pn)}');
+                        final io = (p.internalOrderNo ?? '').trim();
+                        if (io.isNotEmpty) keys.add('io:${_norm(io)}');
+
+                        final isDup = keys.any(
+                          (k) => existingKeys.contains(k) || seenImportKeys.contains(k),
+                        );
+                        if (isDup) {
+                          skipped++;
+                          continue;
+                        }
                         try {
                           await projCtrl.createProjectRemote(p);
+                          imported++;
+                          seenImportKeys.addAll(keys);
                         } catch (e) {
-                          // ignore errors per item
+                          // ignore per-item errors but don't count as imported
                         }
                       }
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(
-                              'Imported ${projects.length} project(s) from Excel',
-                            ),
+                            content: Text('Imported $imported, skipped $skipped duplicate(s).'),
                           ),
                         );
                       }
