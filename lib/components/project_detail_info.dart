@@ -26,12 +26,25 @@ class ProjectDetailInfo extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          'Project Details',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 12),
         Card(
           child: Padding(
             padding: cardPadding ?? const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (project.projectNo != null && project.projectNo!.isNotEmpty)
+                  DetailRow(label: 'Project No.', value: project.projectNo!),
+                if (project.internalOrderNo != null &&
+                    project.internalOrderNo!.isNotEmpty)
+                  DetailRow(
+                    label: 'Project / Internal Order No.',
+                    value: project.internalOrderNo!,
+                  ),
                 DetailRow(label: 'Title', value: project.title),
                 DetailRow(
                   label: 'Started',
@@ -39,7 +52,12 @@ class ProjectDetailInfo extends StatelessWidget {
                 ),
                 DetailRow(label: 'Priority', value: project.priority),
                 DetailRow(label: 'Status', value: project.status),
-                DetailRow(label: 'Executor', value: project.executor ?? '--'),
+                DetailRow(
+                  label: 'Executor',
+                  value: (project.executor?.trim().isNotEmpty ?? false)
+                      ? project.executor!.trim()
+                      : '--',
+                ),
               ],
             ),
           ),
