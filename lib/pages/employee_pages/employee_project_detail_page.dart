@@ -241,10 +241,10 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
       final membershipService = Get.find<ProjectMembershipService>();
       final roles = await roleService.getAll();
       Role? leaderRole = roles.firstWhereOrNull(
-        (r) => r.roleName.toLowerCase() == 'team leader',
+        (r) => r.roleName.toLowerCase() == 'sdh',
       );
       leaderRole ??= roles.firstWhereOrNull(
-        (r) => r.roleName.toLowerCase() == 'sdh',
+        (r) => r.roleName.toLowerCase() == 'team leader',
       );
       String? leaderRoleId = leaderRole?.id;
       final String? executorRoleId = roles
@@ -255,7 +255,7 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
           ?.id;
       if (leaderRoleId == null) {
         final created = await roleService.create(
-          Role(id: 'new', roleName: 'Team Leader'),
+          Role(id: 'new', roleName: 'SDH'),
         );
         leaderRoleId = created.id;
       }
@@ -293,11 +293,7 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
         }
       }
 
-      await apply(
-        leaderRoleId!,
-        'team leader',
-        widget.details.teamLeaderIds.toSet(),
-      );
+      await apply(leaderRoleId!, 'sdh', widget.details.teamLeaderIds.toSet());
       await apply(
         executorRoleId,
         'executor',
@@ -355,24 +351,28 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
             ),
             const SizedBox(height: 8),
             filtered.isEmpty
-                ? const Text('No matches')
-                : ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, i) {
-                      final m = filtered[i];
-                      final checked = selected.contains(m.id);
-                      return CheckboxListTile(
-                        value: checked,
-                        onChanged: (v) =>
-                            setState(() => toggle(m.id, v == true)),
-                        title: Text(m.name),
-                        subtitle: Text(m.email),
-                        dense: true,
-                        controlAffinity: ListTileControlAffinity.leading,
-                      );
-                    },
+                ? const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Text('No matches'),
+                  )
+                : SizedBox(
+                    height: 300,
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: filtered.length,
+                      itemBuilder: (context, i) {
+                        final m = filtered[i];
+                        final checked = selected.contains(m.id);
+                        return CheckboxListTile(
+                          value: checked,
+                          onChanged: (v) =>
+                              setState(() => toggle(m.id, v == true)),
+                          title: Text(m.name),
+                          dense: true,
+                          controlAffinity: ListTileControlAffinity.leading,
+                        );
+                      },
+                    ),
                   ),
             const SizedBox(height: 8),
             Text(
@@ -405,7 +405,7 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _section(
-            title: 'Assign Team Leader',
+            title: 'Assign SDH',
             ctrl: _searchLeader,
             selected: d.teamLeaderIds,
             toggle: d.toggleTeamLeader,
@@ -437,7 +437,7 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
           children: [
             Expanded(
               child: _section(
-                title: 'Assign Team Leader',
+                title: 'Assign SDH',
                 ctrl: _searchLeader,
                 selected: d.teamLeaderIds,
                 toggle: d.toggleTeamLeader,
