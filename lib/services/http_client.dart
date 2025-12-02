@@ -7,6 +7,10 @@ class SimpleHttp {
   Future<Map<String, dynamic>> getJson(Uri uri) async {
     final res = await http.get(uri, headers: _headers());
     final body = res.body;
+    // Guard against HTML or non-JSON responses
+    if (_looksLikeHtml(body)) {
+      throw Exception('Non-JSON response (HTML) from ${uri.toString()} status=${res.statusCode}');
+    }
     final json = body.isNotEmpty ? jsonDecode(body) : {};
     if (res.statusCode >= 400) {
       throw Exception(
@@ -25,6 +29,9 @@ class SimpleHttp {
     final payload = jsonEncode(data);
     final res = await http.post(uri, headers: _headers(), body: payload);
     final body = res.body;
+    if (_looksLikeHtml(body)) {
+      throw Exception('Non-JSON response (HTML) from ${uri.toString()} status=${res.statusCode}');
+    }
     final json = body.isNotEmpty ? jsonDecode(body) : {};
     if (res.statusCode >= 400) {
       throw Exception(
@@ -43,6 +50,9 @@ class SimpleHttp {
     final payload = jsonEncode(data);
     final res = await http.put(uri, headers: _headers(), body: payload);
     final body = res.body;
+    if (_looksLikeHtml(body)) {
+      throw Exception('Non-JSON response (HTML) from ${uri.toString()} status=${res.statusCode}');
+    }
     final json = body.isNotEmpty ? jsonDecode(body) : {};
     if (res.statusCode >= 400) {
       throw Exception(
@@ -58,6 +68,9 @@ class SimpleHttp {
     final res = await http.delete(uri, headers: _headers());
     if (res.statusCode >= 400) {
       final body = res.body;
+      if (_looksLikeHtml(body)) {
+        throw Exception('Non-JSON error response (HTML) from ${uri.toString()} status=${res.statusCode}');
+      }
       final json = body.isNotEmpty ? jsonDecode(body) : {};
       throw Exception(
         json is Map && json['message'] != null
@@ -78,6 +91,9 @@ class SimpleHttp {
     final streamedRes = await req.send();
     final res = await http.Response.fromStream(streamedRes);
     final body = res.body;
+    if (_looksLikeHtml(body)) {
+      throw Exception('Non-JSON response (HTML) from ${uri.toString()} status=${res.statusCode}');
+    }
     final json = body.isNotEmpty ? jsonDecode(body) : {};
     if (res.statusCode >= 400) {
       throw Exception(
@@ -87,6 +103,12 @@ class SimpleHttp {
       );
     }
     return json as Map<String, dynamic>;
+  }
+
+  bool _looksLikeHtml(String body) {
+    if (body.isEmpty) return false;
+    final trimmed = body.trimLeft();
+    return trimmed.startsWith('<!DOCTYPE html') || trimmed.startsWith('<html');
   }
 
   Map<String, String> _headers() {
