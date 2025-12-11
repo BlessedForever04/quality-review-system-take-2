@@ -9,6 +9,7 @@ import '../../services/project_membership_service.dart';
 import '../../services/role_service.dart';
 import '../../models/role.dart';
 import 'phase1_checklist.dart';
+import '../../services/approval_service.dart';
 
 class EmployeeProjectDetailPage extends StatefulWidget {
   final Project project;
@@ -159,16 +160,15 @@ class _EmployeeProjectDetailsPageState
                         final leaders = _namesFrom(details.teamLeaderIds);
                         final reviewers = _namesFrom(details.reviewerIds);
                         final executors = _namesFrom(details.executorIds);
-                        Get.to(
-                          () => QuestionsScreen(
-                            projectId: proj.id,
-                            projectTitle: proj.title,
-                            leaders: leaders,
-                            reviewers: reviewers,
-                            executors: executors,
-                            initialPhase: phase,
-                          ),
-                        );
+                        Get.to(() => QuestionsScreen(
+                              projectId: proj.id,
+                              projectTitle: proj.title,
+                              leaders: leaders,
+                              reviewers: reviewers,
+                              executors: executors,
+                              initialPhase: phase,
+                              // Optionally deep-link to specific sub-question: pass via initialSubQuestion
+                            ));
                       },
                     ),
                     const SizedBox(height: 24),
@@ -210,31 +210,100 @@ class _EmployeeProjectDetailsPageState
   }
 }
 
-class _PhaseCards extends StatelessWidget {
+class _PhaseCards extends StatefulWidget {
   final Project project;
   final void Function(int phase) onOpenChecklist;
   const _PhaseCards({required this.project, required this.onOpenChecklist});
 
   @override
+  State<_PhaseCards> createState() => _PhaseCardsState();
+}
+
+class _PhaseCardsState extends State<_PhaseCards> {
+  int _activePhase = 1;
+  final Map<int, bool> _answersDiffer = {};
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _prefetch();
+  }
+
+  Future<void> _prefetch() async {
+    setState(() => _loading = true);
+    try {
+      final ApprovalService svc = Get.find<ApprovalService>();
+      // Compute active phase from approvals
+      int ap = 1;
+      final st1 = await svc.getStatus(widget.project.id, 1);
+      if (st1 != null && st1['status'] == 'approved') {
+        ap = 2;
+        final st2 = await svc.getStatus(widget.project.id, 2);
+        if (st2 != null && st2['status'] == 'approved') {
+          ap = 3;
+        }
+      }
+      _activePhase = ap;
+      // Compare for phases
+      for (final p in [1, 2, 3]) {
+        try {
+          final cmp = await svc.compare(widget.project.id, p);
+          _answersDiffer[p] = !(cmp['match'] == true);
+        } catch (_) {
+          _answersDiffer[p] = false;
+        }
+      }
+    } catch (_) {
+      _activePhase = 1;
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Decide active phase from project meta if available; else use 1
-    int activePhase = 1;
-    // If you have project.approval status cached, you can refine this.
+    final activePhase = _activePhase;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Phases', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
+        if (_loading)
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
         Wrap(
           spacing: 12,
           runSpacing: 12,
           children: [1, 2, 3].map((p) {
             final isActive = p == activePhase;
             final isOld = p < activePhase;
+            final canOpen = p <= activePhase;
+            final differs = _answersDiffer[p] == true;
+            final cardColor = differs ? Colors.red.shade50 : Colors.white;
+            final borderColor = differs
+                ? Colors.redAccent
+                : (isActive ? Colors.green : Colors.blueGrey);
             return GestureDetector(
-              onTap: () => onOpenChecklist(p),
+              onTap: canOpen
+                  ? () => widget.onOpenChecklist(p)
+                  : () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Phase $p is locked. Complete Phase ${p - 1} first.',
+                          ),
+                        ),
+                      );
+                    },
               child: Card(
-                elevation: 1,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(color: borderColor, width: 1),
+                ),
+                color: cardColor,
                 child: Container(
                   width: 220,
                   padding: const EdgeInsets.all(12),
@@ -244,7 +313,9 @@ class _PhaseCards extends StatelessWidget {
                         radius: 16,
                         backgroundColor: isActive
                             ? Colors.green
-                            : Colors.blueGrey,
+                            : (canOpen
+                                  ? Colors.blueGrey
+                                  : Colors.grey.shade300),
                         child: Text(
                           '$p',
                           style: const TextStyle(color: Colors.white),
@@ -264,10 +335,10 @@ class _PhaseCards extends StatelessWidget {
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                if (isOld)
-                                  _Badge(label: 'View only')
-                                else if (isActive)
-                                  _Badge(label: 'Active'),
+                                if (differs) _Badge(label: 'Answers differ'),
+                                if (isOld) _Badge(label: 'View only'),
+                                if (!canOpen) _Badge(label: 'Locked'),
+                                if (isActive) _Badge(label: 'Active'),
                               ],
                             ),
                           ],

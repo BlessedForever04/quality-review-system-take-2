@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:collection/collection.dart';
 import '../../models/project.dart';
 import '../../controllers/projects_controller.dart';
 import '../../controllers/team_controller.dart';
@@ -575,7 +574,7 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
         }
       }
 
-      await apply(leaderRoleId!, 'sdh', widget.details.teamLeaderIds.toSet());
+      await apply(leaderRoleId, 'sdh', widget.details.teamLeaderIds.toSet());
       await apply(
         executorRoleId,
         'executor',

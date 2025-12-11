@@ -35,6 +35,7 @@ class QuestionsScreen extends StatefulWidget {
   final List<String> reviewers;
   final List<String> executors;
   final int? initialPhase;
+  final String? initialSubQuestion;
 
   const QuestionsScreen({
     super.key,
@@ -44,6 +45,7 @@ class QuestionsScreen extends StatefulWidget {
     required this.reviewers,
     required this.executors,
     this.initialPhase,
+    this.initialSubQuestion,
   });
 
   @override
@@ -61,6 +63,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   int _activePhase = 1; // max editable phase (older are view-only)
   Map<String, dynamic>? _approvalStatus; // pending/approved/reverted
   Map<String, dynamic>? _compareStatus; // match + stats
+  final ScrollController _executorScroll = ScrollController();
+  final ScrollController _reviewerScroll = ScrollController();
+  final Set<String> _highlightSubs = {};
 
   ApprovalService get _approvalService => Get.find<ApprovalService>();
 
@@ -232,6 +237,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   Future<void> _loadChecklistData() async {
     setState(() {
       _isLoadingData = true;
+      // Clear any prior phase status to avoid showing messages from other phases
+      _approvalStatus = null;
+      _compareStatus = null;
     });
     final phase = _selectedPhase;
     print(
@@ -285,6 +293,42 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
 
     // Compute active phase (approved phases advance)
     await _computeActivePhase();
+
+    // If an initial sub-question was provided, expand and scroll to it
+    if (widget.initialSubQuestion != null) {
+      final target = widget.initialSubQuestion!;
+      final idx = checklist.indexWhere((q) => q.subQuestions.contains(target));
+      if (idx != -1) {
+        setState(() {
+          executorExpanded.add(idx);
+          reviewerExpanded.add(idx);
+          _highlightSubs.add(target);
+        });
+        // Try to scroll to approximate position
+        await Future.delayed(const Duration(milliseconds: 100));
+        final offset = (idx * 140).toDouble();
+        if (_executorScroll.hasClients) {
+          _executorScroll.animateTo(
+            offset,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+        if (_reviewerScroll.hasClients) {
+          _reviewerScroll.animateTo(
+            offset,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+        // Clear highlight after a short delay
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            setState(() => _highlightSubs.remove(target));
+          }
+        });
+      }
+    }
   }
 
   Future<void> _computeActivePhase() async {
@@ -304,6 +348,21 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       // If selected phase exceeds known phases cap at active
       if (_selectedPhase > _activePhase) _selectedPhase = _activePhase;
     });
+    // Refresh approval/compare for the currently selected phase
+    try {
+      final status = await _approvalService.compare(
+        widget.projectId,
+        _selectedPhase,
+      );
+      setState(() => _compareStatus = status);
+    } catch (_) {}
+    try {
+      final appr = await _approvalService.getStatus(
+        widget.projectId,
+        _selectedPhase,
+      );
+      setState(() => _approvalStatus = appr);
+    } catch (_) {}
   }
 
   @override
@@ -351,6 +410,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                   .map(
                     (p) => DropdownMenuItem(
                       value: p,
+                      enabled: p <= _activePhase,
                       child: Row(
                         children: [
                           Text('Phase $p'),
@@ -392,6 +452,17 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                   .toList(),
               onChanged: (val) async {
                 if (val == null) return;
+                // Restrict jumping ahead of active phase
+                if (val > _activePhase) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'You can only proceed to the next phase after approval.',
+                      ),
+                    ),
+                  );
+                  return;
+                }
                 setState(() {
                   _selectedPhase = val;
                 });
@@ -417,7 +488,10 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
               onSelected: (value) async {
                 if (value == 'approve') {
                   try {
-                    await _approvalService.approve(widget.projectId, 1);
+                    await _approvalService.approve(
+                      widget.projectId,
+                      _selectedPhase,
+                    );
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Approved. Next phase created.'),
@@ -431,7 +505,10 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                   }
                 } else if (value == 'revert') {
                   try {
-                    await _approvalService.revert(widget.projectId, 1);
+                    await _approvalService.revert(
+                      widget.projectId,
+                      _selectedPhase,
+                    );
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Reverted to current stage.'),
@@ -551,19 +628,46 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         ),
                         Expanded(
                           child: ListView.builder(
+                            controller: _executorScroll,
                             padding: const EdgeInsets.all(8),
                             itemCount: checklist.length,
                             itemBuilder: (context, index) {
                               final question = checklist[index];
+                              final differsForQuestion = question.subQuestions.any((subQ) {
+                                final exRaw = (executorAnswers[subQ]?['answer']) ??
+                                    (checklistCtrl.getAnswers(
+                                      widget.projectId,
+                                      _selectedPhase,
+                                      'executor',
+                                      subQ,
+                                    )?['answer']);
+                                final rvRaw = (reviewerAnswers[subQ]?['answer']) ??
+                                    (checklistCtrl.getAnswers(
+                                      widget.projectId,
+                                      _selectedPhase,
+                                      'reviewer',
+                                      subQ,
+                                    )?['answer']);
+                                final ex = exRaw is String ? exRaw.trim().toLowerCase() : exRaw;
+                                final rv = rvRaw is String ? rvRaw.trim().toLowerCase() : rvRaw;
+                                return ex != rv;
+                              });
                               final isExpanded = executorExpanded.contains(
                                 index,
                               );
                               return Card(
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(10),
-                                  side: const BorderSide(color: Colors.blue),
+                                  side: BorderSide(
+                                    color: differsForQuestion
+                                        ? Colors.redAccent
+                                        : Colors.blue,
+                                  ),
                                 ),
                                 margin: const EdgeInsets.symmetric(vertical: 6),
+                                color: differsForQuestion
+                                    ? Colors.red.shade50
+                                    : null,
                                 child: Column(
                                   children: [
                                     ListTile(
@@ -627,6 +731,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                                                     ans,
                                                   );
                                                 },
+                                                highlight: _highlightSubs
+                                                    .contains(subQ),
                                               ),
                                             );
                                           }).toList(),
@@ -713,19 +819,46 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         ),
                         Expanded(
                           child: ListView.builder(
+                            controller: _reviewerScroll,
                             padding: const EdgeInsets.all(8),
                             itemCount: checklist.length,
                             itemBuilder: (context, index) {
                               final question = checklist[index];
+                              final differsForQuestion = question.subQuestions.any((subQ) {
+                                final exRaw = (executorAnswers[subQ]?['answer']) ??
+                                    (checklistCtrl.getAnswers(
+                                      widget.projectId,
+                                      _selectedPhase,
+                                      'executor',
+                                      subQ,
+                                    )?['answer']);
+                                final rvRaw = (reviewerAnswers[subQ]?['answer']) ??
+                                    (checklistCtrl.getAnswers(
+                                      widget.projectId,
+                                      _selectedPhase,
+                                      'reviewer',
+                                      subQ,
+                                    )?['answer']);
+                                final ex = exRaw is String ? exRaw.trim().toLowerCase() : exRaw;
+                                final rv = rvRaw is String ? rvRaw.trim().toLowerCase() : rvRaw;
+                                return ex != rv;
+                              });
                               final isExpanded = reviewerExpanded.contains(
                                 index,
                               );
                               return Card(
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(10),
-                                  side: const BorderSide(color: Colors.green),
+                                  side: BorderSide(
+                                    color: differsForQuestion
+                                        ? Colors.redAccent
+                                        : Colors.green,
+                                  ),
                                 ),
                                 margin: const EdgeInsets.symmetric(vertical: 6),
+                                color: differsForQuestion
+                                    ? Colors.red.shade50
+                                    : null,
                                 child: Column(
                                   children: [
                                     ListTile(
@@ -789,6 +922,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                                                     ans,
                                                   );
                                                 },
+                                                highlight: _highlightSubs
+                                                    .contains(subQ),
                                               ),
                                             );
                                           }).toList(),
@@ -917,6 +1052,7 @@ class SubQuestionCard extends StatefulWidget {
   final Map<String, dynamic>? initialData;
   final Function(Map<String, dynamic>) onAnswer;
   final bool editable;
+  final bool highlight;
 
   const SubQuestionCard({
     super.key,
@@ -924,6 +1060,7 @@ class SubQuestionCard extends StatefulWidget {
     this.initialData,
     required this.onAnswer,
     this.editable = true,
+    this.highlight = false,
   });
 
   @override
@@ -1002,7 +1139,7 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final base = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
@@ -1133,5 +1270,16 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
           ),
       ],
     );
+    if (widget.highlight) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.yellow.shade50,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.amber.shade200),
+        ),
+        child: Padding(padding: const EdgeInsets.all(6.0), child: base),
+      );
+    }
+    return base;
   }
 }
