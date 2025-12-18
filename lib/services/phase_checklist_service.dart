@@ -70,6 +70,13 @@ class PhaseChecklistService {
     return (json['data'] as Map<String, dynamic>);
   }
 
+  // Delete checklist
+  Future<void> deleteChecklist(String id) async {
+    _ensureToken();
+    final uri = Uri.parse('${ApiConfig.checklistBaseUrl}/checklists/$id');
+    await http.delete(uri);
+  }
+
   // Fetch checkpoints for a checklist
   Future<List<Map<String, dynamic>>> getCheckpoints(String checklistId) async {
     _ensureToken();
@@ -82,6 +89,37 @@ class PhaseChecklistService {
     final data = (json['data'] as List?) ?? [];
     print('✓ Checkpoints parsed: ${data.length} items');
     return data.cast<Map<String, dynamic>>();
+  }
+
+  // Create a checkpoint (question) under a checklist
+  Future<Map<String, dynamic>> createCheckpoint(
+    String checklistId, {
+    required String question,
+  }) async {
+    _ensureToken();
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/checklists/$checklistId/checkpoints',
+    );
+    final json = await http.postJson(uri, {'question': question});
+    return (json['data'] as Map<String, dynamic>);
+  }
+
+  // Update a checkpoint (e.g., rename question text)
+  Future<Map<String, dynamic>> updateCheckpoint(
+    String checkpointId,
+    Map<String, dynamic> patch,
+  ) async {
+    _ensureToken();
+    final uri = Uri.parse('${ApiConfig.baseUrl}/checkpoints/$checkpointId');
+    final json = await http.patchJson(uri, patch);
+    return (json['data'] as Map<String, dynamic>);
+  }
+
+  // Delete a checkpoint
+  Future<void> deleteCheckpoint(String checkpointId) async {
+    _ensureToken();
+    final uri = Uri.parse('${ApiConfig.baseUrl}/checkpoints/$checkpointId');
+    await http.delete(uri);
   }
 
   // Submit/approve/request-changes

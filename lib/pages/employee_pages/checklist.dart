@@ -26,40 +26,39 @@ class ImageUploadState {
 
 class Question {
   final String mainQuestion;
-  final List<String> subQuestions;
-  final String? checkpointId; // MongoDB ID for backend checkpoint
+  // Each sub-question keeps its backend id (if any) and display text.
+  // { 'id': '<checkpointId>', 'text': '<question text>' }
+  final List<Map<String, String>> subQuestions;
   final String? checklistId; // MongoDB ID for backend checklist
 
   Question({
     required this.mainQuestion,
     required this.subQuestions,
-    this.checkpointId,
     this.checklistId,
   });
 
-  /// Create Question from a single checkpoint (one sub-question)
-  factory Question.fromCheckpoint(Map<String, dynamic> checkpoint) {
-    final id = (checkpoint['_id'] ?? '').toString();
-    final text = (checkpoint['question'] ?? '').toString();
-    return Question(mainQuestion: text, subQuestions: [], checkpointId: id);
-  }
-
-  /// Create a group of questions from a checklist with its checkpoints
   static List<Question> fromChecklist(
     Map<String, dynamic> checklist,
     List<Map<String, dynamic>> checkpoints,
   ) {
     final checklistId = (checklist['_id'] ?? '').toString();
     final checklistName = (checklist['checklist_name'] ?? '').toString();
-    final checkpointTexts = checkpoints
-        .map((cp) => (cp['question'] ?? '').toString())
-        .where((text) => text.isNotEmpty)
+
+    final checkpointObjs = checkpoints
+        .map(
+          (cp) => {
+            'id': (cp['_id'] ?? '').toString(),
+            'text': (cp['question'] ?? '').toString(),
+          },
+        )
+        .where((m) => (m['text'] ?? '').isNotEmpty)
+        .cast<Map<String, String>>()
         .toList();
 
     return [
       Question(
         mainQuestion: checklistName,
-        subQuestions: checkpointTexts,
+        subQuestions: checkpointObjs,
         checklistId: checklistId,
       ),
     ];
@@ -96,7 +95,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   final Set<int> executorExpanded = {};
   final Set<int> reviewerExpanded = {};
   String? _errorMessage;
+  bool _editMode = false;
   late final ChecklistController checklistCtrl;
+  String? _currentStageId;
   bool _isLoadingData = true;
   int _selectedPhase = 1; // currently viewed phase
   int _activePhase = 1; // max editable phase (older are view-only)
@@ -190,6 +191,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       }
 
       final stageId = (stage['_id'] ?? '').toString();
+      _currentStageId = stageId;
       print('✓ Stage found: $stageId');
 
       // Step 3: Fetch checklists for this stage
@@ -243,16 +245,23 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
 
         final checkpoints = await checklistService.getCheckpoints(checklistId);
         print('    Checkpoints: ${checkpoints.length}');
-        final checkpointTexts = checkpoints
-            .map((cp) => (cp['question'] ?? '').toString())
-            .where((text) => text.isNotEmpty)
+
+        final cpObjs = checkpoints
+            .map(
+              (cp) => {
+                'id': (cp['_id'] ?? '').toString(),
+                'text': (cp['question'] ?? '').toString(),
+              },
+            )
+            .where((m) => (m['text'] ?? '').isNotEmpty)
+            .cast<Map<String, String>>()
             .toList();
 
-        if (checkpointTexts.isNotEmpty) {
+        if (cpObjs.isNotEmpty) {
           questions.add(
             Question(
               mainQuestion: checklistName,
-              subQuestions: checkpointTexts,
+              subQuestions: cpObjs,
               checklistId: checklistId,
             ),
           );
@@ -325,12 +334,21 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
     // If an initial sub-question was provided, expand and scroll to it
     if (widget.initialSubQuestion != null) {
       final target = widget.initialSubQuestion!;
-      final idx = checklist.indexWhere((q) => q.subQuestions.contains(target));
+      final idx = checklist.indexWhere(
+        (q) => q.subQuestions.any(
+          (s) => (s['text'] ?? '') == target || (s['id'] ?? '') == target,
+        ),
+      );
       if (idx != -1) {
+        // compute stable key for highlight
+        final matched = checklist[idx].subQuestions.firstWhere(
+          (s) => (s['text'] ?? '') == target || (s['id'] ?? '') == target,
+        );
+        final key = (matched['id'] ?? matched['text'])!;
         setState(() {
           executorExpanded.add(idx);
           reviewerExpanded.add(idx);
-          _highlightSubs.add(target);
+          _highlightSubs.add(key);
         });
         // Try to scroll to approximate position
         await Future.delayed(const Duration(milliseconds: 100));
@@ -352,7 +370,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         // Clear highlight after a short delay
         Future.delayed(const Duration(seconds: 2), () {
           if (mounted) {
-            setState(() => _highlightSubs.remove(target));
+            setState(() => _highlightSubs.remove(key));
           }
         });
       }
@@ -511,6 +529,16 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                     _loadChecklistData();
                   },
           ),
+          IconButton(
+            icon: Icon(
+              _editMode ? Icons.check : Icons.edit,
+              color: Colors.white,
+            ),
+            tooltip: _editMode ? 'Exit edit mode' : 'Enter edit mode',
+            onPressed: () {
+              setState(() => _editMode = !_editMode);
+            },
+          ),
           if (isSDH)
             PopupMenuButton<String>(
               icon: const Icon(Icons.admin_panel_settings, color: Colors.white),
@@ -613,6 +641,74 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         compareStatus: _compareStatus,
                       ),
                     ),
+                  if (_editMode)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _currentStageId == null
+                                ? null
+                                : () async {
+                                    final nameCtrl = TextEditingController();
+                                    final resp = await showDialog<String?>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('New checklist name'),
+                                        content: TextField(
+                                          controller: nameCtrl,
+                                          decoration: const InputDecoration(
+                                            hintText: 'Checklist name',
+                                          ),
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.of(ctx).pop(null),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          TextButton(
+                                            onPressed: () => Navigator.of(
+                                              ctx,
+                                            ).pop(nameCtrl.text.trim()),
+                                            child: const Text('Create'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (resp != null && resp.isNotEmpty) {
+                                      try {
+                                        final svc =
+                                            Get.find<PhaseChecklistService>();
+                                        await svc.createForStage(
+                                          _currentStageId!,
+                                          name: resp,
+                                        );
+                                        await _loadChecklistData();
+                                      } catch (e) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Create failed: $e'),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add checklist'),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Edit mode: changes apply immediately to this project',
+                          ),
+                        ],
+                      ),
+                    ),
                   Expanded(
                     child: Row(
                       children: [
@@ -661,6 +757,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                               await _computeActivePhase();
                             }
                           },
+                          editMode: _editMode,
+                          onRefresh: _loadChecklistData,
                         ),
                         _RoleColumn(
                           role: 'reviewer',
@@ -707,6 +805,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                               await _computeActivePhase();
                             }
                           },
+                          editMode: _editMode,
+                          onRefresh: _loadChecklistData,
                         ),
                       ],
                     ),
@@ -724,6 +824,148 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   }
 }
 
+class _AddCheckpointRow extends StatefulWidget {
+  final String? checklistId;
+  final Future<void> Function()? onAdded;
+  const _AddCheckpointRow({super.key, this.checklistId, this.onAdded});
+
+  @override
+  State<_AddCheckpointRow> createState() => _AddCheckpointRowState();
+}
+
+class _AddCheckpointRowState extends State<_AddCheckpointRow> {
+  final TextEditingController _ctrl = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _ctrl,
+            decoration: const InputDecoration(
+              hintText: 'New checkpoint question',
+            ),
+            onSubmitted: (_) => _add(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        ElevatedButton(
+          onPressed: _loading ? null : _add,
+          child: _loading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Add'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _add() async {
+    final txt = _ctrl.text.trim();
+    if (txt.isEmpty || widget.checklistId == null) return;
+    setState(() => _loading = true);
+    try {
+      final svc = Get.find<PhaseChecklistService>();
+      await svc.createCheckpoint(widget.checklistId!, question: txt);
+      _ctrl.clear();
+      if (widget.onAdded != null) await widget.onAdded!();
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Add failed: $e')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+}
+
+class _EditableCheckpointTile extends StatefulWidget {
+  final String initialText;
+  final String? checkpointId;
+  final String? checklistId;
+  final Future<void> Function()? onSaved;
+  const _EditableCheckpointTile({
+    super.key,
+    required this.initialText,
+    this.checkpointId,
+    this.checklistId,
+    this.onSaved,
+  });
+
+  @override
+  State<_EditableCheckpointTile> createState() =>
+      _EditableCheckpointTileState();
+}
+
+class _EditableCheckpointTileState extends State<_EditableCheckpointTile> {
+  late final TextEditingController _ctrl;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _ctrl,
+      decoration: InputDecoration(
+        suffixIcon: IconButton(
+          icon: _loading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.save),
+          onPressed: _loading ? null : _save,
+        ),
+      ),
+      onSubmitted: (_) => _save(),
+    );
+  }
+
+  Future<void> _save() async {
+    final txt = _ctrl.text.trim();
+    if (txt.isEmpty) return;
+    setState(() => _loading = true);
+    try {
+      final svc = Get.find<PhaseChecklistService>();
+      if (widget.checkpointId != null && widget.checkpointId!.isNotEmpty) {
+        await svc.updateCheckpoint(widget.checkpointId!, {'question': txt});
+      } else if (widget.checklistId != null && widget.checklistId!.isNotEmpty) {
+        await svc.createCheckpoint(widget.checklistId!, question: txt);
+      }
+      if (widget.onSaved != null) await widget.onSaved!();
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+}
+
 class _RoleColumn extends StatelessWidget {
   final String role;
   final Color color;
@@ -737,6 +979,8 @@ class _RoleColumn extends StatelessWidget {
   final ScrollController scrollController;
   final Set<String> highlightSubs;
   final ChecklistController checklistCtrl;
+  final bool editMode;
+  final Future<void> Function()? onRefresh;
   final Function(int) onExpand;
   final Function(String, Map<String, dynamic>) onAnswer;
   final Future<void> Function() onSubmit;
@@ -757,6 +1001,8 @@ class _RoleColumn extends StatelessWidget {
     required this.onExpand,
     required this.onAnswer,
     required this.onSubmit,
+    this.editMode = false,
+    this.onRefresh,
   });
 
   @override
@@ -820,22 +1066,27 @@ class _RoleColumn extends StatelessWidget {
               itemCount: checklist.length,
               itemBuilder: (context, index) {
                 final q = checklist[index];
+                // sub is Map<String,String>
+                String _subKey(Map<String, String> s) =>
+                    (s['id'] ?? s['text'])!;
+                String _subText(Map<String, String> s) => (s['text'] ?? '');
                 final differs = q.subQuestions.any((sub) {
+                  final key = _subKey(sub);
                   final a =
-                      answers[sub]?['answer'] ??
+                      answers[key]?['answer'] ??
                       checklistCtrl.getAnswers(
                         projectId,
                         phase,
                         role,
-                        sub,
+                        key,
                       )?['answer'];
                   final b =
-                      otherAnswers[sub]?['answer'] ??
+                      otherAnswers[key]?['answer'] ??
                       checklistCtrl.getAnswers(
                         projectId,
                         phase,
                         role == 'executor' ? 'reviewer' : 'executor',
-                        sub,
+                        key,
                       )?['answer'];
                   return (a is String ? a.trim().toLowerCase() : a) !=
                       (b is String ? b.trim().toLowerCase() : b);
@@ -851,9 +1102,129 @@ class _RoleColumn extends StatelessWidget {
                   child: Column(
                     children: [
                       ListTile(
-                        title: Text(
-                          q.mainQuestion,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                q.mainQuestion,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            if (editMode &&
+                                (q.checklistId != null &&
+                                    q.checklistId!.isNotEmpty))
+                              Row(
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Rename checklist',
+                                    icon: const Icon(Icons.edit),
+                                    onPressed: () async {
+                                      final ctrl = TextEditingController(
+                                        text: q.mainQuestion,
+                                      );
+                                      final newName = await showDialog<String?>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          title: const Text('Rename checklist'),
+                                          content: TextField(controller: ctrl),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.of(ctx).pop(null),
+                                              child: const Text('Cancel'),
+                                            ),
+                                            TextButton(
+                                              onPressed: () => Navigator.of(
+                                                ctx,
+                                              ).pop(ctrl.text.trim()),
+                                              child: const Text('Save'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (newName != null &&
+                                          newName.isNotEmpty) {
+                                        try {
+                                          final svc =
+                                              Get.find<PhaseChecklistService>();
+                                          await svc.updateChecklist(
+                                            q.checklistId!,
+                                            {'checklist_name': newName},
+                                          );
+                                          if (onRefresh != null)
+                                            await onRefresh!();
+                                        } catch (e) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Rename failed: $e',
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    },
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Delete checklist',
+                                    icon: const Icon(
+                                      Icons.delete_forever,
+                                      color: Colors.redAccent,
+                                    ),
+                                    onPressed: () async {
+                                      final ok = await showDialog<bool?>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          title: const Text(
+                                            'Delete checklist?',
+                                          ),
+                                          content: const Text(
+                                            'This will remove the checklist and its checkpoints for this project.',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.of(ctx).pop(false),
+                                              child: const Text('Cancel'),
+                                            ),
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.of(ctx).pop(true),
+                                              child: const Text('Delete'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (ok == true) {
+                                        try {
+                                          final svc =
+                                              Get.find<PhaseChecklistService>();
+                                          await svc.deleteChecklist(
+                                            q.checklistId!,
+                                          );
+                                          if (onRefresh != null)
+                                            await onRefresh!();
+                                        } catch (e) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Delete failed: $e',
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                          ],
                         ),
                         trailing: Icon(
                           isExpanded
@@ -867,29 +1238,124 @@ class _RoleColumn extends StatelessWidget {
                           padding: const EdgeInsets.all(12.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: q.subQuestions
-                                .map(
-                                  (subQ) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 10),
-                                    child: SubQuestionCard(
-                                      key: ValueKey("${role}_$subQ"),
-                                      subQuestion: subQ,
-                                      editable: canEdit,
-                                      initialData:
-                                          answers[subQ] ??
-                                          checklistCtrl.getAnswers(
-                                            projectId,
-                                            phase,
-                                            role,
-                                            subQ,
-                                          ),
-                                      onAnswer: (ans) =>
-                                          canEdit ? onAnswer(subQ, ans) : null,
-                                      highlight: highlightSubs.contains(subQ),
-                                    ),
+                            children: [
+                              // When editing allow adding a checkpoint
+                              if (editMode)
+                                _AddCheckpointRow(
+                                  checklistId: q.checklistId,
+                                  onAdded: onRefresh,
+                                ),
+                              ...q.subQuestions.map((sub) {
+                                final key = _subKey(sub);
+                                final text = _subText(sub);
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (editMode)
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: _EditableCheckpointTile(
+                                                initialText: text,
+                                                checkpointId: sub['id'],
+                                                checklistId: q.checklistId,
+                                                onSaved: onRefresh,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.delete,
+                                                color: Colors.red,
+                                              ),
+                                              onPressed:
+                                                  sub['id'] != null &&
+                                                      sub['id']!.isNotEmpty
+                                                  ? () async {
+                                                      final confirm = await showDialog<bool?>(
+                                                        context: context,
+                                                        builder: (ctx) => AlertDialog(
+                                                          title: const Text(
+                                                            'Delete checkpoint?',
+                                                          ),
+                                                          content: const Text(
+                                                            'This will delete the checkpoint for this checklist.',
+                                                          ),
+                                                          actions: [
+                                                            TextButton(
+                                                              onPressed: () =>
+                                                                  Navigator.of(
+                                                                    ctx,
+                                                                  ).pop(false),
+                                                              child: const Text(
+                                                                'Cancel',
+                                                              ),
+                                                            ),
+                                                            TextButton(
+                                                              onPressed: () =>
+                                                                  Navigator.of(
+                                                                    ctx,
+                                                                  ).pop(true),
+                                                              child: const Text(
+                                                                'Delete',
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      );
+                                                      if (confirm == true) {
+                                                        try {
+                                                          final svc =
+                                                              Get.find<
+                                                                PhaseChecklistService
+                                                              >();
+                                                          await svc
+                                                              .deleteCheckpoint(
+                                                                sub['id']!,
+                                                              );
+                                                          if (onRefresh != null)
+                                                            await onRefresh!();
+                                                        } catch (e) {
+                                                          ScaffoldMessenger.of(
+                                                            context,
+                                                          ).showSnackBar(
+                                                            SnackBar(
+                                                              content: Text(
+                                                                'Delete failed: $e',
+                                                              ),
+                                                            ),
+                                                          );
+                                                        }
+                                                      }
+                                                    }
+                                                  : null,
+                                            ),
+                                          ],
+                                        ),
+                                      SubQuestionCard(
+                                        key: ValueKey("${role}_$key"),
+                                        subQuestion: text,
+                                        editable: canEdit,
+                                        initialData:
+                                            answers[key] ??
+                                            checklistCtrl.getAnswers(
+                                              projectId,
+                                              phase,
+                                              role,
+                                              key,
+                                            ),
+                                        onAnswer: (ans) =>
+                                            canEdit ? onAnswer(key, ans) : null,
+                                        highlight: highlightSubs.contains(key),
+                                      ),
+                                    ],
                                   ),
-                                )
-                                .toList(),
+                                );
+                              }).toList(),
+                            ],
                           ),
                         ),
                     ],
