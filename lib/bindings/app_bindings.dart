@@ -7,6 +7,7 @@ import '../services/project_service.dart';
 import '../services/user_service.dart';
 import '../services/role_service.dart';
 import '../services/project_membership_service.dart';
+import '../services/template_service.dart';
 import '../controllers/auth_controller.dart';
 import '../pages/employee_pages/checklist_controller.dart';
 import '../services/checklist_answer_service.dart';
@@ -34,6 +35,10 @@ class AppBindings extends Bindings {
     );
     Get.put<ApprovalService>(
       ApprovalService(Get.find<SimpleHttp>()),
+      permanent: true,
+    );
+    Get.put<TemplateService>(
+      TemplateService(Get.find<SimpleHttp>()),
       permanent: true,
     );
 

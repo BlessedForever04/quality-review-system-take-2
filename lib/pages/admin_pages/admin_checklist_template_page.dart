@@ -1,14 +1,13 @@
-import 'dart:convert';
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../../services/template_service.dart';
 
 // Admin Checklist Template Management Page
-// - 3 phases (P1, P2, P3) with independent state
+// - 3 phases (P1, P2, P3) with backend integration
 // - Manage Checklist Groups (add/edit/delete)
 // - Manage Questions within each group (add/edit/delete)
-// - Question has text, Yes/No radio preview, optional Remark field (preview-only)
-// - Confirmation modals for deletions
-// - JSON-based state structure prepared for backend integration later
+// - All operations persist to database via TemplateService
+// - Phase data loaded from MongoDB template singleton
 
 class AdminChecklistTemplatePage extends StatefulWidget {
   const AdminChecklistTemplatePage({super.key});
@@ -20,8 +19,6 @@ class AdminChecklistTemplatePage extends StatefulWidget {
 
 class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
     with SingleTickerProviderStateMixin {
-  // Internal simple models kept local to this page for now
-  // to keep scope frontend-only and reusable later with APIs.
   late final TabController _tabController;
 
   // Independent state per phase
@@ -29,64 +26,24 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
   late List<TemplateGroup> _p2Groups;
   late List<TemplateGroup> _p3Groups;
 
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  // Getter for TemplateService - ensures it's always available
+  TemplateService get _templateService => Get.find<TemplateService>();
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
 
-    // Dummy starter data for P1, P2, P3
-    _p1Groups = [
-      TemplateGroup(
-        id: _gid(),
-        name: 'Verification',
-        expanded: true,
-        questions: [
-          TemplateQuestion(
-            id: _qid(),
-            text: 'Are design inputs available?',
-            hasRemark: true,
-          ),
-          TemplateQuestion(id: _qid(), text: 'CAD is up to date?'),
-        ],
-      ),
-      TemplateGroup(
-        id: _gid(),
-        name: 'Geometry Preparation',
-        questions: [
-          TemplateQuestion(
-            id: _qid(),
-            text: 'Interference checks completed?',
-            hasRemark: true,
-          ),
-        ],
-      ),
-    ];
+    // Initialize empty lists
+    _p1Groups = [];
+    _p2Groups = [];
+    _p3Groups = [];
 
-    _p2Groups = [
-      TemplateGroup(
-        id: _gid(),
-        name: 'Shell Mesh',
-        expanded: true,
-        questions: [
-          TemplateQuestion(id: _qid(), text: 'Element quality within limits?'),
-          TemplateQuestion(id: _qid(), text: 'Mesh density validated?'),
-        ],
-      ),
-    ];
-
-    _p3Groups = [
-      TemplateGroup(
-        id: _gid(),
-        name: 'Post-Processing',
-        questions: [
-          TemplateQuestion(
-            id: _qid(),
-            text: 'Results reviewed by lead?',
-            hasRemark: true,
-          ),
-        ],
-      ),
-    ];
+    // Load template from backend
+    _loadTemplate();
   }
 
   @override
@@ -95,22 +52,76 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
     super.dispose();
   }
 
-  // ID helpers (sufficient for local-only state)
-  String _gid() => 'g_${DateTime.now().microsecondsSinceEpoch}_${UniqueKey()}';
-  String _qid() => 'q_${DateTime.now().microsecondsSinceEpoch}_${UniqueKey()}';
+  /// Load template from backend database
+  Future<void> _loadTemplate() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
-  // Phase accessors
-  List<TemplateGroup> _groupsForPhase(int index) {
-    switch (index) {
-      case 0:
-        return _p1Groups;
-      case 1:
-        return _p2Groups;
-      case 2:
-      default:
-        return _p3Groups;
+    try {
+      // Fetch template from backend
+      final templateData = await _templateService.fetchTemplate();
+
+      setState(() {
+        // Parse stage1 (Phase 1)
+        _p1Groups = _parseStageData(templateData['stage1'] ?? []);
+
+        // Parse stage2 (Phase 2)
+        _p2Groups = _parseStageData(templateData['stage2'] ?? []);
+
+        // Parse stage3 (Phase 3)
+        _p3Groups = _parseStageData(templateData['stage3'] ?? []);
+
+        _isLoading = false;
+      });
+    } catch (e) {
+      // If template doesn't exist, create it
+      if (e.toString().contains('Template not found')) {
+        try {
+          await _templateService.createOrUpdateTemplate();
+          // Retry loading
+          await _loadTemplate();
+        } catch (createError) {
+          setState(() {
+            _errorMessage = 'Failed to create template: $createError';
+            _isLoading = false;
+          });
+        }
+      } else {
+        setState(() {
+          _errorMessage = 'Error loading template: $e';
+          _isLoading = false;
+        });
+      }
     }
   }
+
+  /// Parse backend stage data into TemplateGroup list
+  List<TemplateGroup> _parseStageData(List<dynamic> stageData) {
+    return stageData.map((checklistData) {
+      final id = (checklistData['_id'] ?? '').toString();
+      final text = (checklistData['text'] ?? '').toString();
+      final checkpointsData =
+          checklistData['checkpoints'] as List<dynamic>? ?? [];
+
+      final questions = checkpointsData.map((cpData) {
+        return TemplateQuestion(
+          id: (cpData['_id'] ?? '').toString(),
+          text: (cpData['text'] ?? '').toString(),
+        );
+      }).toList();
+
+      return TemplateGroup(
+        id: id,
+        name: text,
+        questions: questions,
+        expanded: false,
+      );
+    }).toList();
+  }
+
+  // ID helpers removed - now using MongoDB IDs from backend
 
   void _setGroupsForPhase(int index, List<TemplateGroup> groups) {
     setState(() {
@@ -153,77 +164,131 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
                       ),
                     ),
                   ),
+                  // Reload button
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    tooltip: 'Reload Template',
+                    onPressed: _isLoading ? null : _loadTemplate,
+                  ),
                 ],
               ),
             ),
 
-            // Removed JSON preview per requirement
-
-            // Phase tabs
-            Expanded(
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.black12),
+            // Loading or error state
+            if (_isLoading)
+              const Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Loading template...'),
+                    ],
+                  ),
                 ),
-                child: Column(
-                  children: [
-                    TabBar(
-                      controller: _tabController,
-                      labelColor: const Color(0xFF2196F3),
-                      unselectedLabelColor: Colors.black87,
-                      indicatorColor: const Color(0xFF2196F3),
-                      labelStyle: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+              )
+            else if (_errorMessage != null)
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: Colors.red,
                       ),
-                      unselectedLabelStyle: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
+                      const SizedBox(height: 16),
+                      Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red),
                       ),
-                      tabs: const [
-                        Tab(text: 'Phase 1'),
-                        Tab(text: 'Phase 2'),
-                        Tab(text: 'Phase 3'),
-                      ],
-                    ),
-                    SizedBox(
-                      height: 12,
-                      child: Container(
-                        color: Colors.black12,
-                        width: double.infinity,
-                        height: 1,
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _loadTemplate,
+                        child: const Text('Retry'),
                       ),
-                    ),
-                    // Fill remaining space with TabBarView to avoid overflow
-                    Expanded(
-                      child: TabBarView(
+                    ],
+                  ),
+                ),
+              )
+            else
+              // Phase tabs
+              Expanded(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.black12),
+                  ),
+                  child: Column(
+                    children: [
+                      TabBar(
                         controller: _tabController,
-                        children: [
-                          _PhaseEditor(
-                            key: const ValueKey('phase-1'),
-                            groups: _p1Groups,
-                            onChanged: (g) => _setGroupsForPhase(0, g),
-                          ),
-                          _PhaseEditor(
-                            key: const ValueKey('phase-2'),
-                            groups: _p2Groups,
-                            onChanged: (g) => _setGroupsForPhase(1, g),
-                          ),
-                          _PhaseEditor(
-                            key: const ValueKey('phase-3'),
-                            groups: _p3Groups,
-                            onChanged: (g) => _setGroupsForPhase(2, g),
-                          ),
+                        labelColor: const Color(0xFF2196F3),
+                        unselectedLabelColor: Colors.black87,
+                        indicatorColor: const Color(0xFF2196F3),
+                        labelStyle: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        unselectedLabelStyle: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        tabs: const [
+                          Tab(text: 'Phase 1'),
+                          Tab(text: 'Phase 2'),
+                          Tab(text: 'Phase 3'),
                         ],
                       ),
-                    ),
-                  ],
+                      SizedBox(
+                        height: 12,
+                        child: Container(
+                          color: Colors.black12,
+                          width: double.infinity,
+                          height: 1,
+                        ),
+                      ),
+                      // Fill remaining space with TabBarView to avoid overflow
+                      Expanded(
+                        child: TabBarView(
+                          controller: _tabController,
+                          children: [
+                            _PhaseEditor(
+                              key: const ValueKey('phase-1'),
+                              phaseIndex: 0,
+                              groups: _p1Groups,
+                              onChanged: (g) => _setGroupsForPhase(0, g),
+                              templateService: _templateService,
+                              onReload: _loadTemplate,
+                            ),
+                            _PhaseEditor(
+                              key: const ValueKey('phase-2'),
+                              phaseIndex: 1,
+                              groups: _p2Groups,
+                              onChanged: (g) => _setGroupsForPhase(1, g),
+                              templateService: _templateService,
+                              onReload: _loadTemplate,
+                            ),
+                            _PhaseEditor(
+                              key: const ValueKey('phase-3'),
+                              phaseIndex: 2,
+                              groups: _p3Groups,
+                              onChanged: (g) => _setGroupsForPhase(2, g),
+                              templateService: _templateService,
+                              onReload: _loadTemplate,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
             const SizedBox(height: 8),
           ],
@@ -231,39 +296,22 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
       ),
     );
   }
-
-  Map<String, dynamic> _phaseToJson(List<TemplateGroup> groups) {
-    return {
-      'phase': _tabController.index + 1,
-      'groups': groups
-          .map(
-            (g) => {
-              'id': g.id,
-              'name': g.name,
-              'questions': g.questions
-                  .map(
-                    (q) => {
-                      'id': q.id,
-                      'text': q.text,
-                      'hasRemark': q.hasRemark,
-                    },
-                  )
-                  .toList(),
-            },
-          )
-          .toList(),
-    };
-  }
 }
 
 class _PhaseEditor extends StatefulWidget {
+  final int phaseIndex;
   final List<TemplateGroup> groups;
   final ValueChanged<List<TemplateGroup>> onChanged;
+  final TemplateService templateService;
+  final Future<void> Function() onReload;
 
   const _PhaseEditor({
     super.key,
+    required this.phaseIndex,
     required this.groups,
     required this.onChanged,
+    required this.templateService,
+    required this.onReload,
   });
 
   @override
@@ -272,7 +320,9 @@ class _PhaseEditor extends StatefulWidget {
 
 class _PhaseEditorState extends State<_PhaseEditor> {
   late List<TemplateGroup> _groups;
-  String _gid() => 'g_${DateTime.now().microsecondsSinceEpoch}_${UniqueKey()}';
+  bool _isSaving = false;
+
+  String get _stage => 'stage${widget.phaseIndex + 1}';
 
   @override
   void initState() {
@@ -288,176 +338,336 @@ class _PhaseEditorState extends State<_PhaseEditor> {
     }
   }
 
-  void _commit() => widget.onChanged(_groups.map((g) => g.copy()).toList());
-
+  /// Add checklist group to backend
   Future<void> _addGroup() async {
     final name = await _promptGroupName();
     if (name == null) return;
-    setState(() {
-      _groups.add(TemplateGroup(id: _gid(), name: name, expanded: true));
-    });
-    _commit();
+
+    setState(() => _isSaving = true);
+
+    try {
+      await widget.templateService.addChecklist(
+        stage: _stage,
+        checklistName: name,
+      );
+
+      // Reload to get updated data with MongoDB IDs
+      await widget.onReload();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Checklist group added successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
+  /// Edit checklist group in backend
   Future<void> _editGroup(TemplateGroup group) async {
     final name = await _promptGroupName(initial: group.name);
     if (name == null) return;
-    setState(() => group.name = name);
-    _commit();
+
+    setState(() => _isSaving = true);
+
+    try {
+      await widget.templateService.updateChecklist(
+        checklistId: group.id,
+        stage: _stage,
+        newName: name,
+      );
+
+      await widget.onReload();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Checklist group updated successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
+  /// Remove checklist group from backend
   Future<void> _removeGroup(TemplateGroup group) async {
     final confirm = await _confirmDelete(
       title: 'Remove Checklist Group?',
       message: 'This will delete "${group.name}" and its questions.',
     );
     if (confirm != true) return;
-    setState(() => _groups.removeWhere((g) => g.id == group.id));
-    _commit();
+
+    setState(() => _isSaving = true);
+
+    try {
+      await widget.templateService.deleteChecklist(
+        checklistId: group.id,
+        stage: _stage,
+      );
+
+      await widget.onReload();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
+  /// Add question (checkpoint) to backend
   Future<void> _addQuestion(TemplateGroup group) async {
     final q = await _promptQuestion();
     if (q == null) return;
-    setState(() => group.questions.add(q));
-    _commit();
+
+    setState(() => _isSaving = true);
+
+    try {
+      await widget.templateService.addCheckpoint(
+        checklistId: group.id,
+        stage: _stage,
+        questionText: q.text,
+      );
+
+      await widget.onReload();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
+  /// Edit question (checkpoint) in backend
   Future<void> _editQuestion(
     TemplateGroup group,
     TemplateQuestion question,
   ) async {
     final updated = await _promptQuestion(initial: question);
     if (updated == null) return;
-    setState(() {
-      question.text = updated.text;
-    });
-    _commit();
+
+    setState(() => _isSaving = true);
+
+    try {
+      await widget.templateService.updateCheckpoint(
+        checkpointId: question.id,
+        checklistId: group.id,
+        stage: _stage,
+        newText: updated.text,
+      );
+
+      await widget.onReload();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Question updated successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
+  /// Remove question (checkpoint) from backend
   Future<void> _removeQuestion(TemplateGroup group, TemplateQuestion q) async {
     final confirm = await _confirmDelete(
       title: 'Remove Question?',
       message: 'This will delete the selected question.',
     );
     if (confirm != true) return;
-    setState(() => group.questions.removeWhere((x) => x.id == q.id));
-    _commit();
+
+    setState(() => _isSaving = true);
+
+    try {
+      await widget.templateService.deleteCheckpoint(
+        checkpointId: q.id,
+        checklistId: group.id,
+        stage: _stage,
+      );
+
+      await widget.onReload();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2196F3),
-                foregroundColor: Colors.white,
-                textStyle: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+    return Stack(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2196F3),
+                    foregroundColor: Colors.white,
+                    textStyle: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onPressed: _isSaving ? null : _addGroup,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Checklist Group'),
                 ),
               ),
-              onPressed: _addGroup,
-              icon: const Icon(Icons.add),
-              label: const Text('Add Checklist Group'),
+              const SizedBox(height: 12),
+              Expanded(
+                child: _groups.isEmpty
+                    ? _EmptyState(
+                        title: 'No checklist groups yet',
+                        subtitle: 'Click "Add Checklist Group" to create one.',
+                      )
+                    : ListView.builder(
+                        itemCount: _groups.length,
+                        itemBuilder: (context, i) {
+                          final group = _groups[i];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              side: const BorderSide(color: Colors.black12),
+                            ),
+                            child: ExpansionTile(
+                              initiallyExpanded: group.expanded,
+                              onExpansionChanged: (v) =>
+                                  setState(() => group.expanded = v),
+                              tilePadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              childrenPadding: const EdgeInsets.fromLTRB(
+                                16,
+                                0,
+                                16,
+                                16,
+                              ),
+                              leading: const Icon(
+                                Icons.view_list,
+                                color: Color(0xFF2196F3),
+                              ),
+                              title: Text(
+                                group.name,
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 26,
+                                ),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Edit Group',
+                                    icon: const Icon(Icons.edit),
+                                    onPressed: () => _editGroup(group),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Delete Group',
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () => _removeGroup(group),
+                                  ),
+                                ],
+                              ),
+                              children: [
+                                // Questions list
+                                ...group.questions.map(
+                                  (q) => _QuestionRow(
+                                    question: q,
+                                    onEdit: () => _editQuestion(group, q),
+                                    onDelete: () => _removeQuestion(group, q),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: TextButton.icon(
+                                    onPressed: () => _addQuestion(group),
+                                    style: TextButton.styleFrom(
+                                      textStyle: const TextStyle(fontSize: 16),
+                                    ),
+                                    icon: const Icon(Icons.add),
+                                    label: const Text('Add Question'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+        // Loading overlay when saving
+        if (_isSaving)
+          Container(
+            color: Colors.black26,
+            child: const Center(
+              child: Card(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Saving...'),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: _groups.isEmpty
-                ? _EmptyState(
-                    title: 'No checklist groups yet',
-                    subtitle: 'Click "Add Checklist Group" to create one.',
-                  )
-                : ListView.builder(
-                    itemCount: _groups.length,
-                    itemBuilder: (context, i) {
-                      final group = _groups[i];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          side: const BorderSide(color: Colors.black12),
-                        ),
-                        child: ExpansionTile(
-                          initiallyExpanded: group.expanded,
-                          onExpansionChanged: (v) =>
-                              setState(() => group.expanded = v),
-                          tilePadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          childrenPadding: const EdgeInsets.fromLTRB(
-                            16,
-                            0,
-                            16,
-                            16,
-                          ),
-                          leading: const Icon(
-                            Icons.view_list,
-                            color: Color(0xFF2196F3),
-                          ),
-                          title: Text(
-                            group.name,
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 26,
-                            ),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                tooltip: 'Edit Group',
-                                icon: const Icon(Icons.edit),
-                                onPressed: () => _editGroup(group),
-                              ),
-                              IconButton(
-                                tooltip: 'Delete Group',
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.red,
-                                ),
-                                onPressed: () => _removeGroup(group),
-                              ),
-                            ],
-                          ),
-                          children: [
-                            // Questions list
-                            ...group.questions.map(
-                              (q) => _QuestionRow(
-                                question: q,
-                                onEdit: () => _editQuestion(group, q),
-                                onDelete: () => _removeQuestion(group, q),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: TextButton.icon(
-                                onPressed: () => _addQuestion(group),
-                                style: TextButton.styleFrom(
-                                  textStyle: const TextStyle(fontSize: 16),
-                                ),
-                                icon: const Icon(Icons.add),
-                                label: const Text('Add Question'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -662,67 +872,6 @@ Future<bool?> _confirmDelete({
       ],
     ),
   );
-}
-
-Future<bool?> _confirm({
-  required String title,
-  required String message,
-  String confirmText = 'Yes',
-  String cancelText = 'No',
-}) async {
-  return showDialog<bool>(
-    context: Get.context!,
-    builder: (ctx) => AlertDialog(
-      title: Text(title),
-      content: Text(message),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: Text(cancelText),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF2196F3),
-            foregroundColor: Colors.white,
-          ),
-          onPressed: () => Navigator.pop(ctx, true),
-          child: Text(confirmText),
-        ),
-      ],
-    ),
-  );
-}
-
-class _JsonPreview extends StatelessWidget {
-  final Map<String, dynamic> data;
-  const _JsonPreview({required this.data});
-
-  @override
-  Widget build(BuildContext context) {
-    final jsonText = const JsonEncoder.withIndent('  ').convert(data);
-    return ExpansionTile(
-      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-      title: const Text('JSON Preview (Current Phase)'),
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.grey[50],
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.black12),
-          ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Text(
-              jsonText,
-              style: const TextStyle(fontFamily: 'monospace'),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 // A very small empty state widget to keep consistent styling.

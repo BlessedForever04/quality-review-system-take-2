@@ -9,7 +9,9 @@ class SimpleHttp {
     final body = res.body;
     // Guard against HTML or non-JSON responses
     if (_looksLikeHtml(body)) {
-      throw Exception('Non-JSON response (HTML) from ${uri.toString()} status=${res.statusCode}');
+      throw Exception(
+        'Non-JSON response (HTML) from ${uri.toString()} status=${res.statusCode}',
+      );
     }
     final json = body.isNotEmpty ? jsonDecode(body) : {};
     if (res.statusCode >= 400) {
@@ -30,7 +32,9 @@ class SimpleHttp {
     final res = await http.post(uri, headers: _headers(), body: payload);
     final body = res.body;
     if (_looksLikeHtml(body)) {
-      throw Exception('Non-JSON response (HTML) from ${uri.toString()} status=${res.statusCode}');
+      throw Exception(
+        'Non-JSON response (HTML) from ${uri.toString()} status=${res.statusCode}',
+      );
     }
     final json = body.isNotEmpty ? jsonDecode(body) : {};
     if (res.statusCode >= 400) {
@@ -51,7 +55,32 @@ class SimpleHttp {
     final res = await http.put(uri, headers: _headers(), body: payload);
     final body = res.body;
     if (_looksLikeHtml(body)) {
-      throw Exception('Non-JSON response (HTML) from ${uri.toString()} status=${res.statusCode}');
+      throw Exception(
+        'Non-JSON response (HTML) from ${uri.toString()} status=${res.statusCode}',
+      );
+    }
+    final json = body.isNotEmpty ? jsonDecode(body) : {};
+    if (res.statusCode >= 400) {
+      throw Exception(
+        json is Map && json['message'] != null
+            ? json['message'].toString()
+            : 'HTTP ${res.statusCode}',
+      );
+    }
+    return json as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> patchJson(
+    Uri uri,
+    Map<String, dynamic> data,
+  ) async {
+    final payload = jsonEncode(data);
+    final res = await http.patch(uri, headers: _headers(), body: payload);
+    final body = res.body;
+    if (_looksLikeHtml(body)) {
+      throw Exception(
+        'Non-JSON response (HTML) from ${uri.toString()} status=${res.statusCode}',
+      );
     }
     final json = body.isNotEmpty ? jsonDecode(body) : {};
     if (res.statusCode >= 400) {
@@ -69,7 +98,9 @@ class SimpleHttp {
     if (res.statusCode >= 400) {
       final body = res.body;
       if (_looksLikeHtml(body)) {
-        throw Exception('Non-JSON error response (HTML) from ${uri.toString()} status=${res.statusCode}');
+        throw Exception(
+          'Non-JSON error response (HTML) from ${uri.toString()} status=${res.statusCode}',
+        );
       }
       final json = body.isNotEmpty ? jsonDecode(body) : {};
       throw Exception(
@@ -92,7 +123,9 @@ class SimpleHttp {
     final res = await http.Response.fromStream(streamedRes);
     final body = res.body;
     if (_looksLikeHtml(body)) {
-      throw Exception('Non-JSON response (HTML) from ${uri.toString()} status=${res.statusCode}');
+      throw Exception(
+        'Non-JSON response (HTML) from ${uri.toString()} status=${res.statusCode}',
+      );
     }
     final json = body.isNotEmpty ? jsonDecode(body) : {};
     if (res.statusCode >= 400) {
