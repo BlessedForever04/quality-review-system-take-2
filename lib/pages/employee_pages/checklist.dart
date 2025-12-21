@@ -9,6 +9,7 @@ import '../../controllers/auth_controller.dart';
 import '../../services/approval_service.dart';
 import '../../services/stage_service.dart';
 import '../../services/phase_checklist_service.dart';
+import '../../services/template_service.dart';
 // import '../../config/api_config.dart';
 
 enum UploadStatus { pending, uploading, success, failed }
@@ -27,7 +28,7 @@ class ImageUploadState {
 class Question {
   final String mainQuestion;
   // Each sub-question keeps its backend id (if any) and display text.
-  // { 'id': '<checkpointId>', 'text': '<question text>' }
+  // { 'id': '<checkpointId>', 'text': '<question text>', 'categoryId': '<optional>' }
   final List<Map<String, String>> subQuestions;
   final String? checklistId; // MongoDB ID for backend checklist
 
@@ -49,6 +50,7 @@ class Question {
           (cp) => {
             'id': (cp['_id'] ?? '').toString(),
             'text': (cp['question'] ?? '').toString(),
+            'categoryId': (cp['categoryId'] ?? '').toString(),
           },
         )
         .where((m) => (m['text'] ?? '').isNotEmpty)
@@ -109,6 +111,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   // Defect counting (mismatches between executor and reviewer)
   Map<String, int> _defectsByChecklist = {};
   int _defectsTotal = 0;
+  // Defect categories from template
+  Map<String, Map<String, dynamic>> _defectCategories = {};
 
   ApprovalService get _approvalService => Get.find<ApprovalService>();
 
@@ -138,6 +142,31 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
     _loadChecklistData();
   }
 
+  Map<String, dynamic>? _getCategoryInfo(String? categoryId) {
+    if (categoryId == null || categoryId.isEmpty) {
+      debugPrint('🔹 _getCategoryInfo: categoryId is null or empty');
+      return null;
+    }
+    final cat = _defectCategories[categoryId];
+    if (cat == null) {
+      debugPrint(
+        '🔹 _getCategoryInfo: Category not found for ID: $categoryId. Available IDs: ${_defectCategories.keys.toList()}',
+      );
+      return null;
+    }
+    // Ensure the category has both name and color
+    if ((cat['name'] ?? '').isEmpty || (cat['color'] ?? '').isEmpty) {
+      debugPrint(
+        '🔹 _getCategoryInfo: Category missing name or color for ID: $categoryId, cat: $cat',
+      );
+      return null;
+    }
+    debugPrint(
+      '✓ _getCategoryInfo: Found category for ID: $categoryId, cat: $cat',
+    );
+    return cat;
+  }
+
   Future<void> _loadChecklistData() async {
     if (!mounted) return;
 
@@ -154,6 +183,28 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       print(
         '🔍 CHECKLIST PAGE: Loading data for Phase $phase, ProjectID: ${widget.projectId}',
       );
+
+      // Step 0: Load defect categories from template
+      try {
+        final templateService = Get.find<TemplateService>();
+        final template = await templateService.fetchTemplate();
+        final cats = template['defectCategories'] as List<dynamic>? ?? [];
+        _defectCategories = {};
+        for (final cat in cats) {
+          if (cat is Map<String, dynamic>) {
+            final id = (cat['_id'] ?? '').toString();
+            if (id.isNotEmpty) {
+              _defectCategories[id] = cat;
+              print(
+                '  📂 Category loaded: ID="$id", name="${cat['name']}", color="${cat['color']}"',
+              );
+            }
+          }
+        }
+        print('✓ Defect categories loaded: ${_defectCategories.length}');
+      } catch (e) {
+        print('⚠️ Failed to load defect categories: $e');
+      }
 
       // Step 1: Fetch stages
       final stageService = Get.find<StageService>();
@@ -248,12 +299,17 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         print('    Checkpoints: ${checkpoints.length}');
 
         final cpObjs = checkpoints
-            .map(
-              (cp) => {
+            .map((cp) {
+              final categoryId = (cp['categoryId'] ?? '').toString();
+              print(
+                '  📌 Checkpoint: ${cp['question']} | categoryId: "$categoryId"',
+              );
+              return {
                 'id': (cp['_id'] ?? '').toString(),
                 'text': (cp['question'] ?? '').toString(),
-              },
-            )
+                'categoryId': categoryId,
+              };
+            })
             .where((m) => (m['text'] ?? '').isNotEmpty)
             .cast<Map<String, String>>()
             .toList();
@@ -794,6 +850,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                           scrollController: _executorScroll,
                           highlightSubs: _highlightSubs,
                           checklistCtrl: checklistCtrl,
+                          getCategoryInfo: _getCategoryInfo,
                           onExpand: (idx) => setState(
                             () => executorExpanded.contains(idx)
                                 ? executorExpanded.remove(idx)
@@ -845,6 +902,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                           scrollController: _reviewerScroll,
                           highlightSubs: _highlightSubs,
                           checklistCtrl: checklistCtrl,
+                          getCategoryInfo: _getCategoryInfo,
                           onExpand: (idx) => setState(
                             () => reviewerExpanded.contains(idx)
                                 ? reviewerExpanded.remove(idx)
@@ -1058,6 +1116,7 @@ class _RoleColumn extends StatelessWidget {
   final Future<void> Function() onSubmit;
   final Map<String, int>? defectsByChecklist;
   final bool showDefects;
+  final Map<String, dynamic>? Function(String?)? getCategoryInfo;
 
   const _RoleColumn({
     required this.role,
@@ -1079,6 +1138,7 @@ class _RoleColumn extends StatelessWidget {
     this.onRefresh,
     this.defectsByChecklist,
     this.showDefects = false,
+    this.getCategoryInfo,
   });
 
   @override
@@ -1446,6 +1506,9 @@ class _RoleColumn extends StatelessWidget {
                                         onAnswer: (ans) =>
                                             canEdit ? onAnswer(key, ans) : null,
                                         highlight: highlightSubs.contains(key),
+                                        categoryInfo: getCategoryInfo?.call(
+                                          sub['categoryId'],
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -1648,6 +1711,7 @@ class SubQuestionCard extends StatefulWidget {
   final Function(Map<String, dynamic>) onAnswer;
   final bool editable;
   final bool highlight;
+  final Map<String, dynamic>? categoryInfo;
 
   const SubQuestionCard({
     super.key,
@@ -1656,6 +1720,7 @@ class SubQuestionCard extends StatefulWidget {
     required this.onAnswer,
     this.editable = true,
     this.highlight = false,
+    this.categoryInfo,
   });
 
   @override
@@ -1729,9 +1794,58 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
     final base = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.subQuestion,
-          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.subQuestion,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            if (widget.categoryInfo != null) ...[
+              const SizedBox(width: 8),
+              Builder(
+                builder: (context) {
+                  String colorStr = widget.categoryInfo!['color'] ?? 'FF2196F3';
+                  // Handle different color formats: 'FF2196F3' or '0xFF2196F3' or '2196F3'
+                  if (!colorStr.startsWith('0x')) {
+                    colorStr = '0x$colorStr';
+                  }
+                  if (colorStr.startsWith('0x')) {
+                    colorStr = colorStr.substring(2);
+                  }
+                  if (colorStr.length == 6) {
+                    colorStr = 'FF$colorStr'; // Add alpha channel
+                  }
+
+                  final color = Color(int.parse(colorStr, radix: 16));
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: color),
+                    ),
+                    child: Text(
+                      widget.categoryInfo!['name'] ?? 'Category',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: color,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ],
         ),
         RadioListTile<String>(
           title: const Text("Yes"),

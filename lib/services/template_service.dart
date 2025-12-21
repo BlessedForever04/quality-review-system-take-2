@@ -132,10 +132,12 @@ class TemplateService {
   /// [checklistId] is the MongoDB _id of the checklist
   /// [stage] indicates which stage the checklist belongs to
   /// [questionText] is the checkpoint text
+  /// [categoryId] optional defect category ID
   Future<Map<String, dynamic>> addCheckpoint({
     required String checklistId,
     required String stage,
     required String questionText,
+    String? categoryId,
   }) async {
     try {
       _ensureToken();
@@ -143,9 +145,16 @@ class TemplateService {
         throw Exception('Invalid stage');
       }
 
+      final body = {
+        'stage': stage,
+        'text': questionText,
+        if (categoryId != null && categoryId.isNotEmpty)
+          'categoryId': categoryId,
+      };
+
       final response = await http.postJson(
         Uri.parse('$_baseUrl/checklists/$checklistId/checkpoints'),
-        {'stage': stage, 'text': questionText},
+        body,
       );
       return response['data'] as Map<String, dynamic>? ?? response;
     } catch (e) {
@@ -158,11 +167,13 @@ class TemplateService {
   /// [checklistId] is the MongoDB _id of the parent checklist
   /// [stage] indicates which stage the checkpoint belongs to
   /// [newText] is the updated checkpoint text
+  /// [categoryId] optional defect category ID
   Future<Map<String, dynamic>> updateCheckpoint({
     required String checkpointId,
     required String checklistId,
     required String stage,
     required String newText,
+    String? categoryId,
   }) async {
     try {
       _ensureToken();
@@ -170,9 +181,17 @@ class TemplateService {
         throw Exception('Invalid stage');
       }
 
+      final body = {
+        'checklistId': checklistId,
+        'stage': stage,
+        'text': newText,
+        if (categoryId != null && categoryId.isNotEmpty)
+          'categoryId': categoryId,
+      };
+
       final response = await http.patchJson(
         Uri.parse('$_baseUrl/checkpoints/$checkpointId'),
-        {'checklistId': checklistId, 'stage': stage, 'text': newText},
+        body,
       );
       return response['data'] as Map<String, dynamic>? ?? response;
     } catch (e) {
@@ -201,6 +220,19 @@ class TemplateService {
       });
     } catch (e) {
       throw Exception('Error deleting checkpoint: $e');
+    }
+  }
+
+  /// Update defect categories in template
+  Future<void> updateDefectCategories(List<dynamic> categories) async {
+    try {
+      _ensureToken();
+
+      await http.patchJson(Uri.parse('$_baseUrl/defect-categories'), {
+        'defectCategories': categories.map((c) => c.toJson()).toList(),
+      });
+    } catch (e) {
+      throw Exception('Error updating defect categories: $e');
     }
   }
 }

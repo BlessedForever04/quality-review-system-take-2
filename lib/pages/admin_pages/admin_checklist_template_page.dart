@@ -26,6 +26,9 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
   late List<TemplateGroup> _p2Groups;
   late List<TemplateGroup> _p3Groups;
 
+  // Defect categories
+  late List<DefectCategory> _defectCategories;
+
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -41,6 +44,7 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
     _p1Groups = [];
     _p2Groups = [];
     _p3Groups = [];
+    _defectCategories = [];
 
     // Load template from backend
     _loadTemplate();
@@ -72,6 +76,11 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
 
         // Parse stage3 (Phase 3)
         _p3Groups = _parseStageData(templateData['stage3'] ?? []);
+
+        // Parse defect categories
+        _defectCategories = _parseDefectCategories(
+          templateData['defectCategories'] ?? [],
+        );
 
         _isLoading = false;
       });
@@ -109,6 +118,9 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
         return TemplateQuestion(
           id: (cpData['_id'] ?? '').toString(),
           text: (cpData['text'] ?? '').toString(),
+          categoryId: (cpData['categoryId'] ?? '').toString().isEmpty
+              ? null
+              : (cpData['categoryId'] ?? '').toString(),
         );
       }).toList();
 
@@ -121,7 +133,61 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
     }).toList();
   }
 
+  /// Parse defect categories from backend
+  List<DefectCategory> _parseDefectCategories(List<dynamic> categoriesData) {
+    return categoriesData.map((catData) {
+      return DefectCategory(
+        id: (catData['_id'] ?? '').toString(),
+        name: (catData['name'] ?? '').toString(),
+        color: Color(
+          int.parse(
+            (catData['color'] ?? 'FF2196F3').substring(0, 8),
+            radix: 16,
+          ),
+        ),
+      );
+    }).toList();
+  }
+
   // ID helpers removed - now using MongoDB IDs from backend
+
+  /// Manage defect categories
+  Future<void> _manageCategories() async {
+    await showDialog(
+      context: context,
+      builder: (ctx) => _DefectCategoryManager(
+        categories: _defectCategories,
+        onSave: (updatedCategories) async {
+          setState(() => _isLoading = true);
+          try {
+            // Save to backend
+            await _templateService.updateDefectCategories(updatedCategories);
+            await _loadTemplate();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Categories updated successfully'),
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          } finally {
+            if (mounted) {
+              setState(() => _isLoading = false);
+            }
+          }
+        },
+      ),
+    );
+  }
 
   void _setGroupsForPhase(int index, List<TemplateGroup> groups) {
     setState(() {
@@ -164,6 +230,17 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
                       ),
                     ),
                   ),
+                  // Manage Categories button
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF9C27B0),
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: _isLoading ? null : _manageCategories,
+                    icon: const Icon(Icons.category),
+                    label: const Text('Manage Categories'),
+                  ),
+                  const SizedBox(width: 8),
                   // Reload button
                   IconButton(
                     icon: const Icon(Icons.refresh),
@@ -265,6 +342,7 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
                               onChanged: (g) => _setGroupsForPhase(0, g),
                               templateService: _templateService,
                               onReload: _loadTemplate,
+                              defectCategories: _defectCategories,
                             ),
                             _PhaseEditor(
                               key: const ValueKey('phase-2'),
@@ -273,6 +351,7 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
                               onChanged: (g) => _setGroupsForPhase(1, g),
                               templateService: _templateService,
                               onReload: _loadTemplate,
+                              defectCategories: _defectCategories,
                             ),
                             _PhaseEditor(
                               key: const ValueKey('phase-3'),
@@ -281,6 +360,7 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
                               onChanged: (g) => _setGroupsForPhase(2, g),
                               templateService: _templateService,
                               onReload: _loadTemplate,
+                              defectCategories: _defectCategories,
                             ),
                           ],
                         ),
@@ -304,6 +384,7 @@ class _PhaseEditor extends StatefulWidget {
   final ValueChanged<List<TemplateGroup>> onChanged;
   final TemplateService templateService;
   final Future<void> Function() onReload;
+  final List<DefectCategory> defectCategories;
 
   const _PhaseEditor({
     super.key,
@@ -312,6 +393,7 @@ class _PhaseEditor extends StatefulWidget {
     required this.onChanged,
     required this.templateService,
     required this.onReload,
+    required this.defectCategories,
   });
 
   @override
@@ -437,19 +519,83 @@ class _PhaseEditorState extends State<_PhaseEditor> {
 
   /// Add question (checkpoint) to backend
   Future<void> _addQuestion(TemplateGroup group) async {
-    final q = await _promptQuestion();
+    final q = await _promptQuestion(categories: widget.defectCategories);
     if (q == null) return;
 
     setState(() => _isSaving = true);
 
     try {
-      await widget.templateService.addCheckpoint(
+      final response = await widget.templateService.addCheckpoint(
         checklistId: group.id,
         stage: _stage,
         questionText: q.text,
+        categoryId: q.categoryId,
       );
+      final stageData = response[_stage] as List<dynamic>?;
+      var appliedFromResponse = false;
 
-      await widget.onReload();
+      if (stageData != null) {
+        Map<String, dynamic>? updatedGroupData;
+        for (final item in stageData) {
+          if (item is Map<String, dynamic> &&
+              item['_id']?.toString() == group.id) {
+            updatedGroupData = item;
+            break;
+          }
+        }
+
+        if (updatedGroupData != null) {
+          final questionsData =
+              (updatedGroupData['checkpoints'] as List<dynamic>? ?? []);
+          final updatedQuestions = questionsData
+              .map(
+                (cp) => TemplateQuestion(
+                  id: (cp['_id'] ?? '').toString(),
+                  text: (cp['text'] ?? '').toString(),
+                  categoryId: (cp['categoryId'] ?? '').toString().isEmpty
+                      ? null
+                      : (cp['categoryId'] ?? '').toString(),
+                ),
+              )
+              .toList();
+
+          setState(() {
+            _groups = _groups.map((g) {
+              if (g.id == group.id) {
+                return TemplateGroup(
+                  id: g.id,
+                  name: g.name,
+                  questions: updatedQuestions,
+                  expanded: g.expanded,
+                );
+              }
+              return g;
+            }).toList();
+          });
+          widget.onChanged(_groups);
+          appliedFromResponse = true;
+        }
+      }
+
+      if (!appliedFromResponse) {
+        setState(() {
+          _groups = _groups.map((g) {
+            if (g.id == group.id) {
+              return TemplateGroup(
+                id: g.id,
+                name: g.name,
+                questions: [
+                  ...g.questions,
+                  TemplateQuestion(id: q.id, text: q.text),
+                ],
+                expanded: g.expanded,
+              );
+            }
+            return g;
+          }).toList();
+        });
+        widget.onChanged(_groups);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -468,7 +614,10 @@ class _PhaseEditorState extends State<_PhaseEditor> {
     TemplateGroup group,
     TemplateQuestion question,
   ) async {
-    final updated = await _promptQuestion(initial: question);
+    final updated = await _promptQuestion(
+      initial: question,
+      categories: widget.defectCategories,
+    );
     if (updated == null) return;
 
     setState(() => _isSaving = true);
@@ -479,6 +628,7 @@ class _PhaseEditorState extends State<_PhaseEditor> {
         checklistId: group.id,
         stage: _stage,
         newText: updated.text,
+        categoryId: updated.categoryId,
       );
 
       await widget.onReload();
@@ -624,6 +774,7 @@ class _PhaseEditorState extends State<_PhaseEditor> {
                                     question: q,
                                     onEdit: () => _editQuestion(group, q),
                                     onDelete: () => _removeQuestion(group, q),
+                                    defectCategories: widget.defectCategories,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -677,16 +828,24 @@ class _QuestionRow extends StatelessWidget {
   final TemplateQuestion question;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final List<DefectCategory> defectCategories;
 
   const _QuestionRow({
     required this.question,
     required this.onEdit,
     required this.onDelete,
+    required this.defectCategories,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final category = defectCategories.firstWhere(
+      (c) => c.id == question.categoryId,
+      orElse: () =>
+          DefectCategory(id: '', name: 'Uncategorized', color: Colors.grey),
+    );
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
@@ -696,12 +855,39 @@ class _QuestionRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  question.text,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w400,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      question.text,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: category.color.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: category.color),
+                      ),
+                      child: Text(
+                        category.name,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: category.color.computeLuminance() > 0.5
+                              ? Colors.black
+                              : category.color,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Row(
@@ -736,12 +922,14 @@ class TemplateQuestion {
     required this.text,
     this.hasRemark = false,
     this.remarkHint,
+    this.categoryId,
   });
 
   final String id;
   String text;
   bool hasRemark;
   String? remarkHint;
+  String? categoryId;
   // PreviewAnswer removed
 
   TemplateQuestion copy() => TemplateQuestion(
@@ -749,7 +937,31 @@ class TemplateQuestion {
     text: text,
     hasRemark: hasRemark,
     remarkHint: remarkHint,
+    categoryId: categoryId,
   );
+}
+
+class DefectCategory {
+  DefectCategory({required this.id, required this.name, required this.color});
+
+  final String id;
+  String name;
+  Color color;
+
+  DefectCategory copy() => DefectCategory(id: id, name: name, color: color);
+
+  Map<String, dynamic> toJson() {
+    final json = {
+      'name': name,
+      'color': color.value.toRadixString(16).padLeft(8, '0'),
+    };
+    // Only include _id if it looks like a MongoDB ObjectId (24 hex chars)
+    // Don't include temporary client-side IDs
+    if (id.length == 24 && RegExp(r'^[0-9a-fA-F]{24}$').hasMatch(id)) {
+      json['_id'] = id;
+    }
+    return json;
+  }
 }
 
 class TemplateGroup {
@@ -782,20 +994,13 @@ Future<String?> _promptGroupName({String? initial}) async {
   );
 }
 
-Future<TemplateQuestion?> _promptQuestion({TemplateQuestion? initial}) async {
-  final text = await _textPrompt(
-    title: initial == null ? 'Add Question' : 'Edit Question',
-    label: 'Question Text',
-    initial: initial?.text,
-  );
-
-  if (text == null) return null;
-
-  return TemplateQuestion(
-    id:
-        initial?.id ??
-        'q_${DateTime.now().microsecondsSinceEpoch}_${UniqueKey()}',
-    text: text,
+Future<TemplateQuestion?> _promptQuestion({
+  TemplateQuestion? initial,
+  List<DefectCategory> categories = const [],
+}) async {
+  return await showDialog<TemplateQuestion>(
+    context: Get.context!,
+    builder: (ctx) => _QuestionDialog(initial: initial, categories: categories),
   );
 }
 
@@ -805,24 +1010,28 @@ Future<String?> _textPrompt({
   String? initial,
 }) async {
   final controller = TextEditingController(text: initial ?? '');
+  const dialogWidth = 460.0;
   return showDialog<String>(
     context: Get.context!,
     builder: (ctx) {
       return AlertDialog(
         title: Text(title),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                decoration: InputDecoration(
-                  labelText: label,
-                  border: const OutlineInputBorder(),
-                  isDense: true,
+        content: SizedBox(
+          width: dialogWidth,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  decoration: InputDecoration(
+                    labelText: label,
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         actions: [
@@ -893,6 +1102,331 @@ class _EmptyState extends StatelessWidget {
           Text(subtitle, style: TextStyle(color: Colors.grey[600])),
         ],
       ),
+    );
+  }
+}
+
+// Question Dialog with Category Selection
+class _QuestionDialog extends StatefulWidget {
+  final TemplateQuestion? initial;
+  final List<DefectCategory> categories;
+
+  const _QuestionDialog({this.initial, required this.categories});
+
+  @override
+  State<_QuestionDialog> createState() => _QuestionDialogState();
+}
+
+class _QuestionDialogState extends State<_QuestionDialog> {
+  late final TextEditingController _textController;
+  String? _selectedCategoryId;
+
+  @override
+  void initState() {
+    super.initState();
+    _textController = TextEditingController(text: widget.initial?.text ?? '');
+    _selectedCategoryId = widget.initial?.categoryId;
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.initial == null ? 'Add Question' : 'Edit Question'),
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _textController,
+                decoration: const InputDecoration(
+                  labelText: 'Question Text',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Defect Category',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: _selectedCategoryId,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                hint: const Text('Select category'),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('Uncategorized'),
+                  ),
+                  ...widget.categories.map(
+                    (cat) => DropdownMenuItem<String>(
+                      value: cat.id,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 16,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              color: cat.color,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(cat.name),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() => _selectedCategoryId = value);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF2196F3),
+            foregroundColor: Colors.white,
+          ),
+          onPressed: () {
+            final text = _textController.text.trim();
+            if (text.isEmpty) {
+              Navigator.pop(context);
+              return;
+            }
+
+            final question = TemplateQuestion(
+              id:
+                  widget.initial?.id ??
+                  'q_${DateTime.now().microsecondsSinceEpoch}_${UniqueKey()}',
+              text: text,
+              categoryId: _selectedCategoryId,
+            );
+            Navigator.pop(context, question);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+// Defect Category Manager Dialog
+class _DefectCategoryManager extends StatefulWidget {
+  final List<DefectCategory> categories;
+  final Future<void> Function(List<DefectCategory>) onSave;
+
+  const _DefectCategoryManager({
+    required this.categories,
+    required this.onSave,
+  });
+
+  @override
+  State<_DefectCategoryManager> createState() => _DefectCategoryManagerState();
+}
+
+class _DefectCategoryManagerState extends State<_DefectCategoryManager> {
+  late List<DefectCategory> _categories;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _categories = widget.categories.map((c) => c.copy()).toList();
+  }
+
+  Future<void> _addCategory() async {
+    final nameController = TextEditingController();
+    Color selectedColor = const Color(0xFF2196F3);
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: const Text('Add Category'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Category Name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('Color'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 12,
+                children:
+                    [
+                      Colors.red,
+                      Colors.orange,
+                      Colors.yellow,
+                      Colors.green,
+                      Colors.blue,
+                      Colors.purple,
+                      Colors.pink,
+                      Colors.teal,
+                    ].map((color) {
+                      return GestureDetector(
+                        onTap: () {
+                          setStateDialog(() => selectedColor = color);
+                        },
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: selectedColor == color
+                                  ? Colors.black
+                                  : Colors.transparent,
+                              width: 3,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true && nameController.text.trim().isNotEmpty) {
+      setState(() {
+        _categories.add(
+          DefectCategory(
+            id: 'cat_${DateTime.now().microsecondsSinceEpoch}',
+            name: nameController.text.trim(),
+            color: selectedColor,
+          ),
+        );
+      });
+    }
+  }
+
+  void _deleteCategory(int index) {
+    setState(() {
+      _categories.removeAt(index);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Manage Defect Categories'),
+      content: SizedBox(
+        width: 500,
+        height: 400,
+        child: Column(
+          children: [
+            Expanded(
+              child: _categories.isEmpty
+                  ? const Center(
+                      child: Text('No categories yet. Add one to get started.'),
+                    )
+                  : ListView.builder(
+                      itemCount: _categories.length,
+                      itemBuilder: (ctx, i) {
+                        final cat = _categories[i];
+                        return ListTile(
+                          leading: Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: cat.color,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          title: Text(cat.name),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _deleteCategory(i),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            const Divider(),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ElevatedButton.icon(
+                onPressed: _isSaving ? null : _addCategory,
+                icon: const Icon(Icons.add),
+                label: const Text('Add Category'),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF2196F3),
+            foregroundColor: Colors.white,
+          ),
+          onPressed: _isSaving
+              ? null
+              : () async {
+                  setState(() => _isSaving = true);
+                  try {
+                    await widget.onSave(_categories);
+                    if (mounted) Navigator.pop(context);
+                  } finally {
+                    if (mounted) setState(() => _isSaving = false);
+                  }
+                },
+          child: _isSaving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Save'),
+        ),
+      ],
     );
   }
 }
