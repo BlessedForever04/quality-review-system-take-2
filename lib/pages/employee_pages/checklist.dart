@@ -116,9 +116,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   int _loopbackCounter = 0; // Track loopback count for current phase
   Map<String, Map<String, dynamic>> _defectCategories = {};
   final Map<String, String?> _selectedDefectCategory = {};
-<<<<<<< HEAD
   final Map<String, String?> _selectedDefectSeverity = {};
-=======
   // Cumulative defect tracking
   double _cumulativeDefectRate = 0.0; // Accumulated defect rate percentage
   int _cumulativeDefectCount = 0; // Total defects found so far
@@ -128,7 +126,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   int _totalCheckpointsInSession = 0; // Total checkpoints for this session
   // Revert tracking
   int _revertCount = 0; // Number of times checklist was reverted by SDH
->>>>>>> b148bfe8082fa54cc5d530e06db92bd4452b6154
 
   ApprovalService get _approvalService => Get.find<ApprovalService>();
 
@@ -856,7 +853,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                       widget.projectId,
                       _selectedPhase,
                     );
-<<<<<<< HEAD
 
                     // Clear submission cache to force reload from backend
                     checklistCtrl.clearProjectCache(widget.projectId);
@@ -878,8 +874,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                       }
                     }
 
-=======
-                    // Increment revert count in DB and update locally
+                    // Also increment revert count in DB
                     try {
                       final updatedCount = await _approvalService
                           .incrementRevertCount(
@@ -899,7 +894,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         _revertCount++;
                       });
                     }
->>>>>>> b148bfe8082fa54cc5d530e06db92bd4452b6154
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Reverted to current stage.'),
@@ -977,25 +971,15 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                     ),
                   if (isSDH)
                     Padding(
-<<<<<<< HEAD
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8.0,
                         vertical: 8.0,
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-=======
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
                       child: Column(
->>>>>>> b148bfe8082fa54cc5d530e06db92bd4452b6154
                         children: [
                           _DefectSummaryBar(
                             totalDefects: _defectsTotal,
                             totalCheckpoints: _totalCheckpoints,
-<<<<<<< HEAD
-                          ),
-                          _LoopbackCounterBar(loopbackCount: _loopbackCounter),
-=======
                             cumulativeDefectRate: _cumulativeDefectRate,
                             cumulativeDefectCount: _cumulativeDefectCount,
                             maxDefectsInSession: _maxDefectsSeenInSession,
@@ -1003,65 +987,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                                 _totalCheckpointsInSession,
                           ),
                           const SizedBox(height: 8),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _revertCount > 0
-                                  ? Colors.orange.shade50
-                                  : Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: _revertCount > 0
-                                    ? Colors.orange
-                                    : Colors.grey,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.loop,
-                                  size: 20,
-                                  color: _revertCount > 0
-                                      ? Colors.orange
-                                      : Colors.grey,
-                                ),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Loopback Count (Debug):',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _revertCount > 0
-                                        ? Colors.orange
-                                        : Colors.grey,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    '$_revertCount',
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
->>>>>>> b148bfe8082fa54cc5d530e06db92bd4452b6154
+                          _LoopbackCounterBar(loopbackCount: _loopbackCounter),
                         ],
                       ),
                     ),
@@ -2472,7 +2398,6 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
 
                             if (widget.checkpointId != null &&
                                 widget.onCategoryAssigned != null) {
-<<<<<<< HEAD
                               // Call callback for both null (clear) and non-null values
                               widget.onCategoryAssigned!(
                                 widget.checkpointId!,
@@ -2507,8 +2432,8 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                     decoration: BoxDecoration(
                       border: Border.all(
                         color: _currentSelectedSeverity() == 'Critical'
-                            ? Colors.red.shade300
-                            : Colors.orange.shade300,
+                            ? Colors.red
+                            : Colors.orange,
                       ),
                       borderRadius: BorderRadius.circular(4),
                       color: _currentSelectedSeverity() == 'Critical'
@@ -2519,22 +2444,21 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                       children: [
                         Icon(
                           _currentSelectedSeverity() == 'Critical'
-                              ? Icons.error
-                              : Icons.warning,
+                              ? Icons.warning
+                              : Icons.info,
+                          size: 16,
                           color: _currentSelectedSeverity() == 'Critical'
                               ? Colors.red
                               : Colors.orange,
-                          size: 18,
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          _currentSelectedSeverity()!,
+                          _currentSelectedSeverity() ?? 'Not specified',
                           style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w500,
                             color: _currentSelectedSeverity() == 'Critical'
-                                ? Colors.red.shade800
-                                : Colors.orange.shade800,
+                                ? Colors.red
+                                : Colors.orange,
                           ),
                         ),
                       ],
@@ -2569,12 +2493,6 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                                 widget.checkpointId!,
                                 _currentSelectedCategory(),
                                 severity: val,
-=======
-                              // Call callback for both setting and clearing category
-                              widget.onCategoryAssigned!(
-                                widget.checkpointId!,
-                                val ?? '', // Pass empty string for None/clear
->>>>>>> b148bfe8082fa54cc5d530e06db92bd4452b6154
                               );
                             }
                           }

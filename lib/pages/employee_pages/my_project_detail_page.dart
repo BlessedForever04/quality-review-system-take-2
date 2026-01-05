@@ -115,11 +115,6 @@ class _MyProjectDetailPageState extends State<MyProjectDetailPage> {
             const SizedBox(height: 32),
             if (_showStartButton()) _buildStartButton(),
             const SizedBox(height: 16),
-<<<<<<< HEAD
-            _buildChecklistButton(),
-            const SizedBox(height: 16),
-            _buildExportButton(),
-=======
             if (_project.status.toLowerCase() == 'in progress')
               _buildChecklistButton()
             else
@@ -149,7 +144,8 @@ class _MyProjectDetailPageState extends State<MyProjectDetailPage> {
                   ),
                 ),
               ),
->>>>>>> b148bfe8082fa54cc5d530e06db92bd4452b6154
+            const SizedBox(height: 16),
+            _buildExportButton(),
           ],
         ),
       ),

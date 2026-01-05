@@ -167,24 +167,6 @@ class _EmployeeProjectDetailsPageState
                                 .toList();
                           }
 
-<<<<<<< HEAD
-                        final leaders = _namesFrom(details.teamLeaderIds);
-                        final reviewers = _namesFrom(details.reviewerIds);
-                        final executors = _namesFrom(details.executorIds);
-                        Get.to(
-                          () => QuestionsScreen(
-                            projectId: proj.id,
-                            projectTitle: proj.title,
-                            leaders: leaders,
-                            reviewers: reviewers,
-                            executors: executors,
-                            initialPhase: phase,
-                            // Optionally deep-link to specific sub-question: pass via initialSubQuestion
-                          ),
-                        );
-                      },
-                    ),
-=======
                           final leaders = _namesFrom(details.teamLeaderIds);
                           final reviewers = _namesFrom(details.reviewerIds);
                           final executors = _namesFrom(details.executorIds);
@@ -229,7 +211,6 @@ class _EmployeeProjectDetailsPageState
                         ),
                       ),
                     ],
->>>>>>> b148bfe8082fa54cc5d530e06db92bd4452b6154
                     const SizedBox(height: 24),
                     _RoleAssignmentSections(
                       teamCtrl: _teamCtrl,
