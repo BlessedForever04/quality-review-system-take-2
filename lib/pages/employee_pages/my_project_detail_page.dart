@@ -115,9 +115,41 @@ class _MyProjectDetailPageState extends State<MyProjectDetailPage> {
             const SizedBox(height: 32),
             if (_showStartButton()) _buildStartButton(),
             const SizedBox(height: 16),
+<<<<<<< HEAD
             _buildChecklistButton(),
             const SizedBox(height: 16),
             _buildExportButton(),
+=======
+            if (_project.status.toLowerCase() == 'in progress')
+              _buildChecklistButton()
+            else
+              Card(
+                color: Colors.blue.shade50,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.info, color: Colors.blue.shade600),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Checklists will be available after you start the project.',
+                              style: TextStyle(
+                                color: Colors.blue.shade800,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+>>>>>>> b148bfe8082fa54cc5d530e06db92bd4452b6154
           ],
         ),
       ),
@@ -253,23 +285,25 @@ class _MyProjectDetailPageState extends State<MyProjectDetailPage> {
     final statusLower = _project.status.toLowerCase();
     if (statusLower == 'in progress' || statusLower == 'completed')
       return false;
-    // Current user must be an executor
+    // Current user must be an executor or reviewer
     if (!Get.isRegistered<AuthController>()) return false;
     final auth = Get.find<AuthController>();
     final userId = auth.currentUser.value?.id;
     if (userId == null) return false;
     final isExecutor = _executors.any((m) => m.userId == userId);
-    // Fallback: if executors list empty (membership not hydrated yet) but user is in assignedEmployees
+    final isReviewer = _reviewers.any((m) => m.userId == userId);
+    // Fallback: if executors/reviewers list empty (membership not hydrated yet) but user is in assignedEmployees
     final assignedContainsUser = (_project.assignedEmployees ?? []).contains(
       userId,
     );
-    final fallback = assignedContainsUser && _executors.isEmpty;
+    final fallback =
+        assignedContainsUser && _executors.isEmpty && _reviewers.isEmpty;
     // Debug trace
     // ignore: avoid_print
     print(
-      '[MyProjectDetailPage] _showStartButton status=${_project.status} executors=${_executors.length} userId=$userId isExecutor=$isExecutor assignedContainsUser=$assignedContainsUser fallback=$fallback',
+      '[MyProjectDetailPage] _showStartButton status=${_project.status} executors=${_executors.length} reviewers=${_reviewers.length} userId=$userId isExecutor=$isExecutor isReviewer=$isReviewer assignedContainsUser=$assignedContainsUser fallback=$fallback',
     );
-    return isExecutor || fallback;
+    return isExecutor || isReviewer || fallback;
   }
 
   Widget _buildStartButton() {

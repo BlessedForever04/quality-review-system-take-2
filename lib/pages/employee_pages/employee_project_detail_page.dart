@@ -4,6 +4,7 @@ import '../../models/project.dart';
 import '../../controllers/team_controller.dart';
 import '../../controllers/projects_controller.dart';
 import '../../controllers/project_details_controller.dart';
+import '../../controllers/auth_controller.dart';
 import '../../services/project_service.dart';
 import '../../services/project_membership_service.dart';
 import '../../services/role_service.dart';
@@ -30,10 +31,13 @@ class _EmployeeProjectDetailsPageState
     extends State<EmployeeProjectDetailPage> {
   late ProjectDetailsController _detailsCtrl;
   bool _isLoading = true;
+  bool _starting = false;
+  late Project _project;
 
   @override
   void initState() {
     super.initState();
+    _project = widget.project;
     _detailsCtrl = Get.put(
       ProjectDetailsController(),
       tag: widget.project.id,
@@ -122,6 +126,10 @@ class _EmployeeProjectDetailsPageState
                       ),
                     ),
                     const SizedBox(height: 16),
+                    if (_showStartButton()) ...[
+                      _buildStartButton(),
+                      const SizedBox(height: 16),
+                    ],
                     Text(
                       'Description',
                       style: Theme.of(context).textTheme.titleMedium,
@@ -141,22 +149,25 @@ class _EmployeeProjectDetailsPageState
                       ),
                     ),
                     const SizedBox(height: 24),
-                    _PhaseCards(
-                      project: details.project,
-                      onOpenChecklist: (phase) {
-                        final proj = details.project;
-                        // Derive names from IDs using TeamController
-                        List<String> _namesFrom(Set<String> ids) {
-                          return ids
-                              .map(
-                                (id) => _teamCtrl.members
-                                    .firstWhereOrNull((m) => m.id == id)
-                                    ?.name,
-                              )
-                              .whereType<String>()
-                              .toList();
-                        }
+                    if (details.project.status.toLowerCase() ==
+                        'in progress') ...[
+                      _PhaseCards(
+                        project: details.project,
+                        onOpenChecklist: (phase) {
+                          final proj = details.project;
+                          // Derive names from IDs using TeamController
+                          List<String> _namesFrom(Set<String> ids) {
+                            return ids
+                                .map(
+                                  (id) => _teamCtrl.members
+                                      .firstWhereOrNull((m) => m.id == id)
+                                      ?.name,
+                                )
+                                .whereType<String>()
+                                .toList();
+                          }
 
+<<<<<<< HEAD
                         final leaders = _namesFrom(details.teamLeaderIds);
                         final reviewers = _namesFrom(details.reviewerIds);
                         final executors = _namesFrom(details.executorIds);
@@ -173,6 +184,52 @@ class _EmployeeProjectDetailsPageState
                         );
                       },
                     ),
+=======
+                          final leaders = _namesFrom(details.teamLeaderIds);
+                          final reviewers = _namesFrom(details.reviewerIds);
+                          final executors = _namesFrom(details.executorIds);
+                          Get.to(
+                            () => QuestionsScreen(
+                              projectId: proj.id,
+                              projectTitle: proj.title,
+                              leaders: leaders,
+                              reviewers: reviewers,
+                              executors: executors,
+                              initialPhase: phase,
+                              // Optionally deep-link to specific sub-question: pass via initialSubQuestion
+                            ),
+                          );
+                        },
+                      ),
+                    ] else ...[
+                      Card(
+                        color: Colors.blue.shade50,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.info, color: Colors.blue.shade600),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      'Checklists will be available after the project is started.',
+                                      style: TextStyle(
+                                        color: Colors.blue.shade800,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+>>>>>>> b148bfe8082fa54cc5d530e06db92bd4452b6154
                     const SizedBox(height: 24),
                     _RoleAssignmentSections(
                       teamCtrl: _teamCtrl,
@@ -209,6 +266,134 @@ class _EmployeeProjectDetailsPageState
         ],
       ),
     );
+  }
+
+  bool _showStartButton() {
+    // Must not already be in progress or completed
+    final statusLower = _project.status.toLowerCase();
+    if (statusLower == 'in progress' || statusLower == 'completed')
+      return false;
+    // Current user must be a reviewer/employee
+    if (!Get.isRegistered<AuthController>()) return false;
+    final auth = Get.find<AuthController>();
+    final userId = auth.currentUser.value?.id;
+    if (userId == null) return false;
+    return true; // All reviewers can start
+  }
+
+  Widget _buildStartButton() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ElevatedButton.icon(
+        onPressed: _starting ? null : _confirmStart,
+        icon: _starting
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.play_arrow),
+        label: Text(_starting ? 'Starting...' : 'Start Project'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.green.shade600,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        ),
+      ),
+    );
+  }
+
+  void _confirmStart() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.play_circle_fill, color: Colors.green, size: 28),
+            SizedBox(width: 8),
+            Text('Start Project'),
+          ],
+        ),
+        content: const Padding(
+          padding: EdgeInsets.only(top: 4.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Are you sure you want to start this project?',
+                style: TextStyle(fontSize: 14),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Once started, the review templates will be cloned for all phases.',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green.shade600,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _startProject();
+            },
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Start'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startProject() async {
+    if (!Get.isRegistered<ProjectsController>()) return;
+    setState(() => _starting = true);
+    final projectsCtrl = Get.find<ProjectsController>();
+    final original = _project;
+    final updated = _project.copyWith(
+      started: DateTime.now(),
+      status: 'In Progress',
+    );
+    try {
+      final saved = await projectsCtrl.saveProjectRemote(updated);
+      setState(() {
+        _project = saved;
+        _starting = false;
+      });
+      // Feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Project started'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _project = original; // rollback
+        _starting = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to start project: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 
