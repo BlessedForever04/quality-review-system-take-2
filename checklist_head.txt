@@ -4,7 +4,6 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
-import 'package:collection/collection.dart';
 import 'checklist_controller.dart';
 import '../../controllers/auth_controller.dart';
 import '../../services/approval_service.dart';
@@ -12,7 +11,6 @@ import '../../services/stage_service.dart';
 import '../../services/phase_checklist_service.dart';
 import '../../services/project_checklist_service.dart';
 import '../../services/template_service.dart';
-import '../../services/defect_categorization_service.dart';
 // import '../../config/api_config.dart';
 
 enum UploadStatus { pending, uploading, success, failed }
@@ -70,16 +68,18 @@ class Question {
   }
 
   // New: Create from hierarchical ProjectChecklist group structure
-  static List<Question> fromProjectChecklistGroups(List<dynamic> groups) {
+  static List<Question> fromProjectChecklistGroups(
+    List<dynamic> groups,
+  ) {
     final questions = <Question>[];
-
+    
     for (final group in groups) {
       if (group is! Map<String, dynamic>) continue;
-
+      
       final groupId = (group['_id'] ?? '').toString();
       final groupName = (group['groupName'] ?? '').toString();
       final subQuestions = <Map<String, String>>[];
-
+      
       // Add direct questions in group
       final directQuestions = group['questions'] as List<dynamic>? ?? [];
       for (final q in directQuestions) {
@@ -90,14 +90,14 @@ class Question {
           'categoryId': '', // Can be added later if needed
         });
       }
-
+      
       // Add questions from sections
       final sections = group['sections'] as List<dynamic>? ?? [];
       for (final section in sections) {
         if (section is! Map<String, dynamic>) continue;
         final sectionName = (section['sectionName'] ?? '').toString();
         final sectionQuestions = section['questions'] as List<dynamic>? ?? [];
-
+        
         for (final q in sectionQuestions) {
           if (q is! Map<String, dynamic>) continue;
           subQuestions.add({
@@ -108,18 +108,16 @@ class Question {
           });
         }
       }
-
+      
       if (subQuestions.isNotEmpty) {
-        questions.add(
-          Question(
-            mainQuestion: groupName,
-            subQuestions: subQuestions,
-            checklistId: groupId,
-          ),
-        );
+        questions.add(Question(
+          mainQuestion: groupName,
+          subQuestions: subQuestions,
+          checklistId: groupId,
+        ));
       }
     }
-
+    
     return questions;
   }
 }
@@ -200,7 +198,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
 
     if (widget.initialPhase != null &&
         widget.initialPhase! >= 1 &&
-        widget.initialPhase! <= 5) {
+        widget.initialPhase! <= 3) {
       _selectedPhase = widget.initialPhase!;
     }
 
@@ -221,9 +219,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       );
       return null;
     }
-    if ((cat['name'] ?? '').isEmpty) {
+    if ((cat['name'] ?? '').isEmpty || (cat['color'] ?? '').isEmpty) {
       debugPrint(
-        '🔹 _getCategoryInfo: Category missing name for ID: $categoryId, cat: $cat',
+        '🔹 _getCategoryInfo: Category missing name or color for ID: $categoryId, cat: $cat',
       );
       return null;
     }
@@ -235,11 +233,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
 
   List<Map<String, dynamic>> _getAvailableCategories() {
     return _defectCategories.values.toList();
-  }
-
-  String? _getCheckpointIdForSubQuestion(String subQuestion) {
-    // In this implementation, the checkpoint ID is the subquestion key itself
-    return subQuestion;
   }
 
   Future<void> _assignDefectCategory(
@@ -277,18 +270,16 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       debugPrint('❌ Error assigning category: $e');
       String errorMessage = e.toString();
       // Extract meaningful error message
-      if (errorMessage.contains('Checkpoint not found')) {
-        errorMessage = 'Checkpoint not yet created - please save answer first';
-      } else if (errorMessage.contains('no defect detected')) {
+      if (errorMessage.contains('no defect detected')) {
         errorMessage = 'No defect detected for this checkpoint yet';
       } else if (errorMessage.contains('Non-JSON')) {
         errorMessage = 'Server error - please check if checkpoint exists';
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(errorMessage),
-          backgroundColor: Colors.orange.shade700,
-          duration: const Duration(seconds: 4),
+          content: Text('Error: $errorMessage'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
         ),
       );
     }
@@ -322,7 +313,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
             final id = (cat['_id'] ?? '').toString();
             if (id.isNotEmpty) {
               _defectCategories[id] = cat;
-              print('  📂 Category loaded: ID="$id", name="${cat['name']}"');
+              print(
+                '  📂 Category loaded: ID="$id", name="${cat['name']}", color="${cat['color']}"',
+              );
             }
           }
         }
@@ -383,22 +376,20 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       List<Question> loadedChecklist = [];
       try {
         final projectChecklistService = Get.find<ProjectChecklistService>();
-        final projectChecklistData = await projectChecklistService
-            .fetchChecklist(widget.projectId, stageId);
-
+        final projectChecklistData = await projectChecklistService.fetchChecklist(
+          widget.projectId,
+          stageId,
+        );
+        
         final groups = projectChecklistData['groups'] as List<dynamic>? ?? [];
         if (groups.isNotEmpty) {
           loadedChecklist = Question.fromProjectChecklistGroups(groups);
-          print(
-            '✓ Loaded ${loadedChecklist.length} groups from ProjectChecklist (hierarchical structure)',
-          );
+          print('✓ Loaded ${loadedChecklist.length} groups from ProjectChecklist (hierarchical structure)');
         }
       } catch (e) {
-        print(
-          '⚠️ ProjectChecklist not available, falling back to old structure: $e',
-        );
+        print('⚠️ ProjectChecklist not available, falling back to old structure: $e');
       }
-
+      
       // Step 4: Fallback to old checklist structure if needed
       if (loadedChecklist.isEmpty) {
         List<Map<String, dynamic>> checklists = [];
@@ -406,9 +397,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
           final checklistService = Get.find<PhaseChecklistService>();
           final res = await checklistService.listForStage(stageId);
           checklists = List<Map<String, dynamic>>.from(res as List);
-          print(
-            '✓ Checklists fetched: ${checklists.length} checklists found (old structure)',
-          );
+          print('✓ Checklists fetched: ${checklists.length} checklists found (old structure)');
         } catch (e) {
           final msg = e.toString();
           print('❌ Error fetching checklists: $msg');
@@ -449,56 +438,54 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
           final checklistName = (cl['checklist_name'] ?? '').toString();
           print('  Processing checklist: $checklistName');
 
-          final checkpoints = await checklistService.getCheckpoints(
-            checklistId,
-          );
+          final checkpoints = await checklistService.getCheckpoints(checklistId);
           print('    Checkpoints: ${checkpoints.length}');
 
           final cpObjs = checkpoints
               .map((cp) {
                 final categoryId = (cp['categoryId'] ?? '').toString();
                 // Capture already-assigned defect category from backend (if any)
-                try {
-                  final defect = cp['defect'];
-                  final defectCatId = defect is Map
-                      ? (defect['categoryId'] ?? '').toString()
-                      : '';
-                  final defectSeverity = defect is Map
-                      ? (defect['severity'] ?? '').toString()
-                      : '';
-                  final cpId = (cp['_id'] ?? '').toString();
-                  if (cpId.isNotEmpty) {
-                    _selectedDefectCategory[cpId] = defectCatId.isNotEmpty
-                        ? defectCatId
-                        : _selectedDefectCategory[cpId];
-                    _selectedDefectSeverity[cpId] = defectSeverity.isNotEmpty
-                        ? defectSeverity
-                        : _selectedDefectSeverity[cpId];
-                  }
-                } catch (_) {}
-                print(
-                  '  📌 Checkpoint: ${cp['question']} | categoryId: "$categoryId"',
-                );
-                return {
-                  'id': (cp['_id'] ?? '').toString(),
-                  'text': (cp['question'] ?? '').toString(),
-                  'categoryId': categoryId,
-                };
-              })
-              .where((m) => (m['text'] ?? '').isNotEmpty)
-              .cast<Map<String, String>>()
-              .toList();
+              try {
+                final defect = cp['defect'];
+                final defectCatId = defect is Map
+                    ? (defect['categoryId'] ?? '').toString()
+                    : '';
+                final defectSeverity = defect is Map
+                    ? (defect['severity'] ?? '').toString()
+                    : '';
+                final cpId = (cp['_id'] ?? '').toString();
+                if (cpId.isNotEmpty) {
+                  _selectedDefectCategory[cpId] = defectCatId.isNotEmpty
+                      ? defectCatId
+                      : _selectedDefectCategory[cpId];
+                  _selectedDefectSeverity[cpId] = defectSeverity.isNotEmpty
+                      ? defectSeverity
+                      : _selectedDefectSeverity[cpId];
+                }
+              } catch (_) {}
+              print(
+                '  📌 Checkpoint: ${cp['question']} | categoryId: "$categoryId"',
+              );
+              return {
+                'id': (cp['_id'] ?? '').toString(),
+                'text': (cp['question'] ?? '').toString(),
+                'categoryId': categoryId,
+              };
+            })
+            .where((m) => (m['text'] ?? '').isNotEmpty)
+            .cast<Map<String, String>>()
+            .toList();
 
-          if (cpObjs.isNotEmpty) {
-            loadedChecklist.add(
-              Question(
-                mainQuestion: checklistName,
-                subQuestions: cpObjs,
-                checklistId: checklistId,
-              ),
-            );
-          }
+        if (cpObjs.isNotEmpty) {
+          loadedChecklist.add(
+            Question(
+              mainQuestion: checklistName,
+              subQuestions: cpObjs,
+              checklistId: checklistId,
+            ),
+          );
         }
+      }
       } // Close the if (loadedChecklist.isEmpty) block
 
       // Use the loaded checklist (either from ProjectChecklist or old structure)
@@ -506,9 +493,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       setState(() {
         checklist = loadedChecklist;
       });
-      print(
-        '✅ Checklist loaded successfully: ${loadedChecklist.length} questions',
-      );
+      print('✅ Checklist loaded successfully: ${loadedChecklist.length} questions');
     } catch (e) {
       print('❌ Error loading checklist: $e');
       if (!mounted) return;
@@ -1071,13 +1056,13 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         children: [
                           // Defect Rate on the left
                           _DefectSummaryBar(
-                            totalDefects: _defectsTotal,
-                            totalCheckpoints: _totalCheckpoints,
-                            cumulativeDefectRate: _cumulativeDefectRate,
-                            cumulativeDefectCount: _cumulativeDefectCount,
-                            maxDefectsInSession: _maxDefectsSeenInSession,
-                            totalCheckpointsInSession:
-                                _totalCheckpointsInSession,
+                              totalDefects: _defectsTotal,
+                              totalCheckpoints: _totalCheckpoints,
+                              cumulativeDefectRate: _cumulativeDefectRate,
+                              cumulativeDefectCount: _cumulativeDefectCount,
+                              maxDefectsInSession: _maxDefectsSeenInSession,
+                              totalCheckpointsInSession:
+                                  _totalCheckpointsInSession,
                           ),
                           const Spacer(),
                           // Loopback Counter on the right
@@ -1550,7 +1535,8 @@ class _RoleColumn extends StatelessWidget {
               itemBuilder: (context, index) {
                 final q = checklist[index];
                 // sub is Map<String,String>
-                String subKey(Map<String, String> s) => (s['id'] ?? s['text'])!;
+                String subKey(Map<String, String> s) =>
+                    (s['id'] ?? s['text'])!;
                 String subText(Map<String, String> s) => (s['text'] ?? '');
                 final differs = q.subQuestions.any((sub) {
                   final key = subKey(sub);
@@ -1750,27 +1736,18 @@ class _RoleColumn extends StatelessWidget {
                                   final key = subKey(sub);
                                   final text = subText(sub);
                                   final sectionName = sub['sectionName'];
-
+                                  
                                   final widgets = <Widget>[];
-
+                                  
                                   // Add section header if section changed
-                                  if (sectionName != null &&
-                                      sectionName.isNotEmpty &&
-                                      sectionName != lastSection) {
+                                  if (sectionName != null && sectionName.isNotEmpty && sectionName != lastSection) {
                                     lastSection = sectionName;
                                     widgets.add(
                                       Padding(
-                                        padding: const EdgeInsets.only(
-                                          top: 12,
-                                          bottom: 8,
-                                        ),
+                                        padding: const EdgeInsets.only(top: 12, bottom: 8),
                                         child: Row(
                                           children: [
-                                            const Icon(
-                                              Icons.folder,
-                                              size: 18,
-                                              color: Colors.blue,
-                                            ),
+                                            const Icon(Icons.folder, size: 18, color: Colors.blue),
                                             const SizedBox(width: 8),
                                             Text(
                                               sectionName,
@@ -1785,13 +1762,11 @@ class _RoleColumn extends StatelessWidget {
                                       ),
                                     );
                                   }
-
+                                  
                                   // Add the question card
                                   widgets.add(
                                     Padding(
-                                      padding: const EdgeInsets.only(
-                                        bottom: 10,
-                                      ),
+                                      padding: const EdgeInsets.only(bottom: 10),
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
@@ -1800,138 +1775,124 @@ class _RoleColumn extends StatelessWidget {
                                             Row(
                                               children: [
                                                 Expanded(
-                                                  child:
-                                                      _EditableCheckpointTile(
-                                                        initialText: text,
-                                                        checkpointId: sub['id'],
-                                                        checklistId:
-                                                            q.checklistId,
-                                                        onSaved: onRefresh,
-                                                      ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.delete,
-                                                    color: Colors.red,
-                                                  ),
-                                                  onPressed:
-                                                      sub['id'] != null &&
-                                                          sub['id']!.isNotEmpty
-                                                      ? () async {
-                                                          final confirm = await showDialog<bool?>(
-                                                            context: context,
-                                                            builder: (ctx) => AlertDialog(
-                                                              title: const Text(
-                                                                'Delete checkpoint?',
+                                              child: _EditableCheckpointTile(
+                                                initialText: text,
+                                                checkpointId: sub['id'],
+                                                checklistId: q.checklistId,
+                                                onSaved: onRefresh,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.delete,
+                                                color: Colors.red,
+                                              ),
+                                              onPressed:
+                                                  sub['id'] != null &&
+                                                      sub['id']!.isNotEmpty
+                                                  ? () async {
+                                                      final confirm = await showDialog<bool?>(
+                                                        context: context,
+                                                        builder: (ctx) => AlertDialog(
+                                                          title: const Text(
+                                                            'Delete checkpoint?',
+                                                          ),
+                                                          content: const Text(
+                                                            'This will delete the checkpoint for this checklist.',
+                                                          ),
+                                                          actions: [
+                                                            TextButton(
+                                                              onPressed: () =>
+                                                                  Navigator.of(
+                                                                    ctx,
+                                                                  ).pop(false),
+                                                              child: const Text(
+                                                                'Cancel',
                                                               ),
-                                                              content: const Text(
-                                                                'This will delete the checkpoint for this checklist.',
+                                                            ),
+                                                            TextButton(
+                                                              onPressed: () =>
+                                                                  Navigator.of(
+                                                                    ctx,
+                                                                  ).pop(true),
+                                                              child: const Text(
+                                                                'Delete',
                                                               ),
-                                                              actions: [
-                                                                TextButton(
-                                                                  onPressed: () =>
-                                                                      Navigator.of(
-                                                                        ctx,
-                                                                      ).pop(
-                                                                        false,
-                                                                      ),
-                                                                  child:
-                                                                      const Text(
-                                                                        'Cancel',
-                                                                      ),
-                                                                ),
-                                                                TextButton(
-                                                                  onPressed: () =>
-                                                                      Navigator.of(
-                                                                        ctx,
-                                                                      ).pop(
-                                                                        true,
-                                                                      ),
-                                                                  child:
-                                                                      const Text(
-                                                                        'Delete',
-                                                                      ),
-                                                                ),
-                                                              ],
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      );
+                                                      if (confirm == true) {
+                                                        try {
+                                                          final svc =
+                                                              Get.find<
+                                                                PhaseChecklistService
+                                                              >();
+                                                          await svc
+                                                              .deleteCheckpoint(
+                                                                sub['id']!,
+                                                              );
+                                                          if (onRefresh != null) {
+                                                            await onRefresh!();
+                                                          }
+                                                        } catch (e) {
+                                                          ScaffoldMessenger.of(
+                                                            context,
+                                                          ).showSnackBar(
+                                                            SnackBar(
+                                                              content: Text(
+                                                                'Delete failed: $e',
+                                                              ),
                                                             ),
                                                           );
-                                                          if (confirm == true) {
-                                                            try {
-                                                              final svc =
-                                                                  Get.find<
-                                                                    PhaseChecklistService
-                                                                  >();
-                                                              await svc
-                                                                  .deleteCheckpoint(
-                                                                    sub['id']!,
-                                                                  );
-                                                              if (onRefresh !=
-                                                                  null) {
-                                                                await onRefresh!();
-                                                              }
-                                                            } catch (e) {
-                                                              ScaffoldMessenger.of(
-                                                                context,
-                                                              ).showSnackBar(
-                                                                SnackBar(
-                                                                  content: Text(
-                                                                    'Delete failed: $e',
-                                                                  ),
-                                                                ),
-                                                              );
-                                                            }
-                                                          }
                                                         }
-                                                      : null,
-                                                ),
-                                              ],
+                                                      }
+                                                    }
+                                                  : null,
                                             ),
-                                          SubQuestionCard(
-                                            key: ValueKey("${role}_$key"),
-                                            subQuestion: text,
-                                            editable: canEdit,
-                                            role: role,
-                                            initialData:
-                                                answers[key] ??
-                                                checklistCtrl.getAnswers(
-                                                  projectId,
-                                                  phase,
-                                                  role,
-                                                  key,
-                                                ),
-                                            onAnswer: (ans) => canEdit
-                                                ? onAnswer(key, ans)
-                                                : null,
-                                            highlight: highlightSubs.contains(
+                                          ],
+                                        ),
+                                      SubQuestionCard(
+                                        key: ValueKey("${role}_$key"),
+                                        subQuestion: text,
+                                        editable: canEdit,
+                                        initialData:
+                                            answers[key] ??
+                                            checklistCtrl.getAnswers(
+                                              projectId,
+                                              phase,
+                                              role,
                                               key,
                                             ),
-                                            categoryInfo: getCategoryInfo?.call(
-                                              sub['categoryId'],
-                                            ),
-                                            checkpointId: key,
-                                            selectedCategoryId:
-                                                selectedDefectCategory[key],
-                                            selectedSeverity:
-                                                selectedDefectSeverity[key],
-                                            availableCategories:
-                                                availableCategories,
-                                            onCategoryAssigned: canEdit
-                                                ? onCategoryAssigned
-                                                : null,
-                                          ),
-                                        ],
+                                        onAnswer: (ans) =>
+                                            canEdit ? onAnswer(key, ans) : null,
+                                        highlight: highlightSubs.contains(key),
+                                        categoryInfo: getCategoryInfo?.call(
+                                          sub['categoryId'],
+                                        ),
+                                        checkpointId: key,
+                                        selectedCategoryId:
+                                            selectedDefectCategory[key],
+                                        selectedSeverity:
+                                            selectedDefectSeverity[key],
+                                        availableCategories:
+                                            availableCategories,
+                                        onCategoryAssigned: canEdit
+                                            ? onCategoryAssigned
+                                            : null,
                                       ),
-                                    ),
-                                  );
-
-                                  return Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: widgets,
-                                  );
-                                }).toList();
-                              }(),
+                                    ],
+                                  ),
+                                ),
+                              );
+                              
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: widgets,
+                              );
+                            }).toList();
+                          }(),
                             ],
                           ),
                         ),
@@ -2044,7 +2005,10 @@ class _DefectSummaryBar extends StatelessWidget {
                 ),
                 Text(
                   '(${totalDefects}/${totalCheckpoints})',
-                  style: const TextStyle(fontSize: 10, color: Colors.white),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.white,
+                  ),
                 ),
               ],
             ),
@@ -2206,7 +2170,6 @@ class SubQuestionCard extends StatefulWidget {
   availableCategories; // Added: list of categories from template
   final Function(String checkpointId, String? categoryId, {String? severity})?
   onCategoryAssigned; // Added: callback for category assignment
-  final String role; // Added: to restrict category UI to reviewer only
 
   const SubQuestionCard({
     super.key,
@@ -2221,7 +2184,6 @@ class SubQuestionCard extends StatefulWidget {
     this.selectedSeverity,
     this.availableCategories = const [],
     this.onCategoryAssigned,
-    this.role = 'reviewer', // Default to reviewer for backward compatibility
   });
 
   @override
@@ -2234,11 +2196,6 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
   String? selectedSeverity; // Added: for severity assignment
   final TextEditingController remarkController = TextEditingController();
   List<Map<String, dynamic>> _images = [];
-  Map<String, dynamic>? _categorySuggestion;
-  bool _showSuggestion = false;
-  bool _loadingSuggestion = false;
-  Timer? _debounceTimer;
-  List<Map<String, dynamic>> _localSuggestions = [];
 
   @override
   void initState() {
@@ -2351,8 +2308,6 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
     "answer": selectedOption,
     "remark": remarkController.text,
     "images": _images,
-    "categoryId": selectedCategory,
-    "severity": _currentSelectedSeverity(),
   });
 
   Future<void> _pickImages() async {
@@ -2422,13 +2377,13 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
             Expanded(
               child: TextField(
                 controller: remarkController,
-                onChanged: widget.editable ? _onRemarkChanged : null,
+                onChanged: widget.editable
+                    ? (val) async => await _updateAnswer()
+                    : null,
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: Colors.grey.shade100,
-                  hintText: widget.role == 'reviewer'
-                      ? "Remark (type to auto-suggest category)"
-                      : "Remark",
+                  hintText: "Remark",
                   border: const OutlineInputBorder(borderSide: BorderSide.none),
                 ),
                 enabled: widget.editable,
@@ -2441,113 +2396,9 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
             ),
           ],
         ),
-        if (widget.role == 'reviewer' && _loadingSuggestion)
-          Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Row(
-              children: [
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Analyzing remark for category suggestion...',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                ),
-              ],
-            ),
-          ),
-        if (widget.role == 'reviewer' && _localSuggestions.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Suggested categories",
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                ..._localSuggestions.map((s) {
-                  final confidence = (s['confidence'] as num?)?.toStringAsFixed(
-                    0,
-                  );
-                  return Card(
-                    color: Colors.grey.shade100,
-                    child: ListTile(
-                      dense: true,
-                      title: Text((s['categoryName'] ?? 'Unknown').toString()),
-                      subtitle: confidence != null
-                          ? Text(
-                              'Confidence ~$confidence% | matches ${s['matchCount']} of ${s['tokenCount']}',
-                            )
-                          : null,
-                      trailing: TextButton(
-                        onPressed: widget.editable
-                            ? () => _acceptLocalSuggestion(s)
-                            : null,
-                        child: const Text("Choose"),
-                      ),
-                      onTap: widget.editable
-                          ? () => _acceptLocalSuggestion(s)
-                          : null,
-                    ),
-                  );
-                }).toList(),
-              ],
-            ),
-          ),
-        if (widget.role == 'reviewer' &&
-            _showSuggestion &&
-            _categorySuggestion != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.blue.shade300),
-                borderRadius: BorderRadius.circular(6),
-                color: Colors.blue.shade50,
-              ),
-              padding: const EdgeInsets.all(10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Suggested: ${_categorySuggestion!['categoryName'] ?? 'Unknown'}',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Confidence: ${((_categorySuggestion!['confidence'] ?? 0) as num).toStringAsFixed(0)}%',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: widget.editable ? _acceptSuggestion : null,
-                    icon: const Icon(Icons.check_circle_outline),
-                    label: const Text('Accept'),
-                  ),
-                ],
-              ),
-            ),
-          ),
         // Added: Defect Category Assignment Dropdown
         // Show if categories are available and checkpoint has defect or category already assigned
-        // ONLY visible for REVIEWER role
-        if (widget.role == 'reviewer' &&
-            widget.availableCategories.isNotEmpty &&
+        if (widget.availableCategories.isNotEmpty &&
             widget.checkpointId != null &&
             (currentCat != null || _isDefectDetected()))
           Padding(
@@ -2626,8 +2477,16 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                     onChanged: widget.editable
                         ? (val) {
                             setState(() => selectedCategory = val);
-                            // Category will be saved with answer via _updateAnswer
-                            _updateAnswer();
+
+                            if (widget.checkpointId != null &&
+                                widget.onCategoryAssigned != null) {
+                              // Call callback for both null (clear) and non-null values
+                              widget.onCategoryAssigned!(
+                                widget.checkpointId!,
+                                val,
+                                severity: _currentSelectedSeverity(),
+                              );
+                            }
                           }
                         : null,
                     underline: Container(
@@ -2709,8 +2568,15 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                     onChanged: widget.editable
                         ? (val) {
                             setState(() => selectedSeverity = val);
-                            // Severity will be saved with answer via _updateAnswer
-                            _updateAnswer();
+                            if (widget.checkpointId != null &&
+                                widget.onCategoryAssigned != null &&
+                                _currentSelectedCategory() != null) {
+                              widget.onCategoryAssigned!(
+                                widget.checkpointId!,
+                                _currentSelectedCategory(),
+                                severity: val,
+                              );
+                            }
                           }
                         : null,
                     underline: Container(
@@ -2804,141 +2670,5 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
             child: Padding(padding: const EdgeInsets.all(6.0), child: base),
           )
         : base;
-  }
-
-  // Debounced remark handler
-  void _onRemarkChanged(String newRemark) {
-    _debounceTimer?.cancel();
-    // Only compute suggestions for reviewer role
-    if (widget.role == 'reviewer') {
-      _computeLocalSuggestions(newRemark);
-      _debounceTimer = Timer(const Duration(milliseconds: 600), () {
-        _fetchCategorySuggestion(newRemark);
-      });
-    }
-    _updateAnswer();
-  }
-
-  Future<void> _fetchCategorySuggestion(String remark) async {
-    if (remark.trim().length < 2) {
-      setState(() {
-        _showSuggestion = false;
-        _categorySuggestion = null;
-        _loadingSuggestion = false;
-      });
-      return;
-    }
-    setState(() {
-      _loadingSuggestion = true;
-    });
-    try {
-      final svc = Get.find<DefectCategorizationService>();
-      final checkpointId = widget.checkpointId ?? 'dummy';
-      final suggestion = await svc.suggestCategory(checkpointId, remark.trim());
-      setState(() {
-        _categorySuggestion = suggestion;
-        _showSuggestion = (suggestion['suggestedCategoryId'] ?? '') != '';
-        _loadingSuggestion = false;
-      });
-    } catch (e) {
-      setState(() {
-        _loadingSuggestion = false;
-        _showSuggestion = false;
-        _categorySuggestion = null;
-      });
-    }
-  }
-
-  void _acceptSuggestion() {
-    final s = _categorySuggestion;
-    if (s == null) return;
-    final categoryId = (s['suggestedCategoryId'] ?? '').toString();
-    if (categoryId.isEmpty) return;
-    setState(() {
-      selectedCategory = categoryId;
-      _showSuggestion = false;
-    });
-    // Category will be saved when answer is submitted
-    _updateAnswer();
-  }
-
-  void _acceptLocalSuggestion(Map<String, dynamic> suggestion) {
-    final categoryId = (suggestion['suggestedCategoryId'] ?? '').toString();
-    if (categoryId.isEmpty) return;
-    setState(() => selectedCategory = categoryId);
-    // Category will be saved when answer is submitted
-    _updateAnswer();
-  }
-
-  void _computeLocalSuggestions(String remark) {
-    final text = remark.trim();
-    if (text.length < 2 || widget.availableCategories.isEmpty) {
-      setState(() => _localSuggestions = []);
-      return;
-    }
-    final normalized = text
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
-        .split(RegExp(r'\s+'))
-        .where((t) => t.isNotEmpty)
-        .toList();
-    if (normalized.isEmpty) {
-      setState(() => _localSuggestions = []);
-      return;
-    }
-    final suggestions = <Map<String, dynamic>>[];
-    for (final cat in widget.availableCategories) {
-      final name = (cat['name'] ?? '').toString();
-      final id = (cat['_id'] ?? '').toString();
-      // Gather keywords with graceful fallbacks: keywords[] → aliases[] → name tokens
-      final kwFromArray = (cat['keywords'] as List<dynamic>? ?? [])
-          .map((k) => k.toString().toLowerCase())
-          .where((k) => k.trim().isNotEmpty)
-          .toList();
-      final aliasArray = (cat['aliases'] as List<dynamic>? ?? [])
-          .map((k) => k.toString().toLowerCase())
-          .where((k) => k.trim().isNotEmpty)
-          .toList();
-      final nameTokens = name
-          .toLowerCase()
-          .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
-          .split(RegExp(r'\s+'))
-          .where((t) => t.isNotEmpty)
-          .toList();
-      final kws = [
-        ...kwFromArray,
-        ...aliasArray,
-        ...nameTokens,
-      ].toSet().toList();
-      if (id.isEmpty || kws.isEmpty) continue;
-      double matchCount = 0;
-      for (final token in normalized) {
-        for (final kw in kws) {
-          if (token == kw) {
-            matchCount += 1;
-          } else if (kw.contains(token) || token.contains(kw)) {
-            matchCount += 0.5;
-          }
-        }
-      }
-      final confidence = normalized.isNotEmpty
-          ? (matchCount / normalized.length) * 100
-          : 0.0;
-      if (matchCount > 0) {
-        suggestions.add({
-          'suggestedCategoryId': id,
-          'categoryName': name,
-          'confidence': confidence,
-          'matchCount': matchCount,
-          'tokenCount': normalized.length,
-        });
-      }
-    }
-    suggestions.sort(
-      (a, b) => (b['confidence'] as num).compareTo(a['confidence'] as num),
-    );
-    setState(() {
-      _localSuggestions = suggestions.take(5).toList();
-    });
   }
 }

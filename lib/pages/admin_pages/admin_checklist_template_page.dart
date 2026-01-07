@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../services/template_service.dart';
 
@@ -82,6 +82,21 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
           templateData['defectCategories'] ?? [],
         );
 
+        // Auto-load 41 default categories if none exist or only old useless ones
+        if (_defectCategories.isEmpty || _defectCategories.length <= 4) {
+          print('?? Loading 41 default defect categories automatically...');
+          _defectCategories = _getDefaultDefectCategories();
+          // Save them to backend immediately
+          _templateService
+              .updateDefectCategories(_defectCategories)
+              .then((_) {
+                print('? Default categories saved to backend');
+              })
+              .catchError((e) {
+                print('? Failed to save default categories: $e');
+              });
+        }
+
         _isLoading = false;
       });
     } catch (e) {
@@ -161,6 +176,11 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
       return DefectCategory(
         id: (catData['_id'] ?? '').toString(),
         name: (catData['name'] ?? '').toString(),
+        keywords:
+            (catData['keywords'] as List<dynamic>?)
+                ?.map((k) => k.toString())
+                .toList() ??
+            [],
       );
     }).toList();
   }
@@ -527,10 +547,6 @@ class _PhaseEditorState extends State<_PhaseEditor> {
     }
   }
 
-
-
-
-
   /// Remove question (checkpoint) from backend
   Future<void> _removeQuestion(
     TemplateGroup group,
@@ -564,7 +580,7 @@ class _PhaseEditorState extends State<_PhaseEditor> {
         }
       });
       widget.onChanged(_groups);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Question deleted successfully')),
@@ -618,7 +634,7 @@ class _PhaseEditorState extends State<_PhaseEditor> {
           widget.onChanged(_groups);
         }
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Section added successfully')),
@@ -660,7 +676,7 @@ class _PhaseEditorState extends State<_PhaseEditor> {
         section.name = name;
       });
       widget.onChanged(_groups);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Section updated successfully')),
@@ -704,7 +720,7 @@ class _PhaseEditorState extends State<_PhaseEditor> {
         group.sections.removeWhere((s) => s.id == section.id);
       });
       widget.onChanged(_groups);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Section deleted successfully')),
@@ -740,7 +756,7 @@ class _PhaseEditorState extends State<_PhaseEditor> {
         questionText: q.text,
         sectionId: section?.id,
       );
-      
+
       // Parse response to get new checkpoint with ID
       final stageData = response[_stage] as List<dynamic>?;
       if (stageData != null) {
@@ -751,40 +767,47 @@ class _PhaseEditorState extends State<_PhaseEditor> {
         if (updatedGroup != null) {
           if (section != null) {
             // Find the section and get the new checkpoint
-            final sectionsData = updatedGroup['sections'] as List<dynamic>? ?? [];
+            final sectionsData =
+                updatedGroup['sections'] as List<dynamic>? ?? [];
             final updatedSection = sectionsData.firstWhere(
               (s) => s['_id'].toString() == section.id,
               orElse: () => null,
             );
             if (updatedSection != null) {
-              final checkpointsData = updatedSection['checkpoints'] as List<dynamic>? ?? [];
+              final checkpointsData =
+                  updatedSection['checkpoints'] as List<dynamic>? ?? [];
               if (checkpointsData.isNotEmpty) {
                 final newCheckpoint = checkpointsData.last;
                 setState(() {
-                  section.questions.add(TemplateQuestion(
-                    id: newCheckpoint['_id'].toString(),
-                    text: newCheckpoint['text'].toString(),
-                  ));
+                  section.questions.add(
+                    TemplateQuestion(
+                      id: newCheckpoint['_id'].toString(),
+                      text: newCheckpoint['text'].toString(),
+                    ),
+                  );
                 });
               }
             }
           } else {
             // Add to group directly
-            final checkpointsData = updatedGroup['checkpoints'] as List<dynamic>? ?? [];
+            final checkpointsData =
+                updatedGroup['checkpoints'] as List<dynamic>? ?? [];
             if (checkpointsData.isNotEmpty) {
               final newCheckpoint = checkpointsData.last;
               setState(() {
-                group.questions.add(TemplateQuestion(
-                  id: newCheckpoint['_id'].toString(),
-                  text: newCheckpoint['text'].toString(),
-                ));
+                group.questions.add(
+                  TemplateQuestion(
+                    id: newCheckpoint['_id'].toString(),
+                    text: newCheckpoint['text'].toString(),
+                  ),
+                );
               });
             }
           }
           widget.onChanged(_groups);
         }
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Question added successfully')),
@@ -830,7 +853,7 @@ class _PhaseEditorState extends State<_PhaseEditor> {
         question.remarkHint = updated.remarkHint;
       });
       widget.onChanged(_groups);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Question updated successfully')),
@@ -958,10 +981,15 @@ class _PhaseEditorState extends State<_PhaseEditor> {
                                   initiallyExpanded: section.expanded,
                                   onExpansionChanged: (v) =>
                                       setState(() => section.expanded = v),
-                                  tilePadding:
-                                      const EdgeInsets.symmetric(horizontal: 12),
-                                  childrenPadding:
-                                      const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                                  tilePadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                  childrenPadding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    0,
+                                    12,
+                                    12,
+                                  ),
                                   title: Text(
                                     section.name,
                                     style: const TextStyle(
@@ -978,8 +1006,7 @@ class _PhaseEditorState extends State<_PhaseEditor> {
                                         onPressed: () =>
                                             _editSection(group, section),
                                         constraints: const BoxConstraints(),
-                                        padding:
-                                            const EdgeInsets.all(4),
+                                        padding: const EdgeInsets.all(4),
                                       ),
                                       IconButton(
                                         tooltip: 'Delete Section',
@@ -991,8 +1018,7 @@ class _PhaseEditorState extends State<_PhaseEditor> {
                                         onPressed: () =>
                                             _removeSection(group, section),
                                         constraints: const BoxConstraints(),
-                                        padding:
-                                            const EdgeInsets.all(4),
+                                        padding: const EdgeInsets.all(4),
                                       ),
                                     ],
                                   ),
@@ -1001,10 +1027,10 @@ class _PhaseEditorState extends State<_PhaseEditor> {
                                     ...section.questions.map((q) {
                                       return _QuestionRow(
                                         question: q,
-                                        onEdit: () => _editQuestion(
-                                            group, section, q),
-                                        onDelete: () => _removeQuestion(
-                                            group, section, q),
+                                        onEdit: () =>
+                                            _editQuestion(group, section, q),
+                                        onDelete: () =>
+                                            _removeQuestion(group, section, q),
                                       );
                                     }),
                                     const SizedBox(height: 8),
@@ -1016,8 +1042,9 @@ class _PhaseEditorState extends State<_PhaseEditor> {
                                           section: section,
                                         ),
                                         style: TextButton.styleFrom(
-                                          textStyle:
-                                              const TextStyle(fontSize: 14),
+                                          textStyle: const TextStyle(
+                                            fontSize: 14,
+                                          ),
                                         ),
                                         icon: const Icon(Icons.add, size: 18),
                                         label: const Text('Add Question'),
@@ -1159,18 +1186,21 @@ class TemplateSection {
 }
 
 class DefectCategory {
-  DefectCategory({required this.id, required this.name});
+  DefectCategory({
+    required this.id,
+    required this.name,
+    this.keywords = const [],
+  });
 
   final String id;
   String name;
+  List<String> keywords;
 
-  DefectCategory copy() => DefectCategory(id: id, name: name);
+  DefectCategory copy() =>
+      DefectCategory(id: id, name: name, keywords: List<String>.from(keywords));
 
   Map<String, dynamic> toJson() {
-    final json = {
-      'name': name,
-      'color': '#2196F3', // Default blue color
-    };
+    final json = {'name': name, 'keywords': keywords};
     // Only include _id if it looks like a MongoDB ObjectId (24 hex chars)
     if (id.length == 24 && RegExp(r'^[0-9a-fA-F]{24}$').hasMatch(id)) {
       json['_id'] = id;
@@ -1411,6 +1441,384 @@ class _QuestionDialogState extends State<_QuestionDialog> {
   }
 }
 
+// Default seed categories with keywords
+List<DefectCategory> _getDefaultDefectCategories() {
+  return [
+    // Geometry/Modeling Issues (6)
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_1',
+      name: 'Incorrect Modelling Strategy - Geometry',
+      keywords: [
+        'geometry',
+        'modelling',
+        'model',
+        'incorrect strategy',
+        'geometric',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_2',
+      name: 'Incorrect Modelling Strategy - Material',
+      keywords: [
+        'material',
+        'modelling',
+        'properties',
+        'material properties',
+        'incorrect',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_3',
+      name: 'Incorrect Modelling Strategy - Loads',
+      keywords: [
+        'loads',
+        'loading',
+        'force',
+        'boundary condition',
+        'load case',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_4',
+      name: 'Incorrect Modelling Strategy - BC',
+      keywords: ['bc', 'boundary condition', 'constraint', 'support', 'fixed'],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_5',
+      name: 'Incorrect Modelling Strategy - Assumptions',
+      keywords: [
+        'assumptions',
+        'assumption',
+        'simplification',
+        'unclear',
+        'not documented',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_6',
+      name: 'Incorrect Modelling Strategy - Acceptance Criteria',
+      keywords: [
+        'acceptance',
+        'criteria',
+        'acceptance criteria',
+        'requirements',
+        'specification',
+      ],
+    ),
+    // Mesh Issues (7)
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_7',
+      name: 'Incorrect geometry units',
+      keywords: ['units', 'geometry units', 'mm', 'cm', 'meter', 'measurement'],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_8',
+      name: 'Incorrect meshing',
+      keywords: ['meshing', 'mesh', 'element', 'discretization', 'refinement'],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_9',
+      name: 'Defective mesh quality',
+      keywords: [
+        'mesh quality',
+        'defective',
+        'aspect ratio',
+        'distorted',
+        'poor quality',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_10',
+      name: 'Incorrect contact definition',
+      keywords: [
+        'contact',
+        'contact definition',
+        'interface',
+        'interaction',
+        'friction',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_11',
+      name: 'Incorrect beam/bolt modeling',
+      keywords: ['beam', 'bolt', 'modeling', 'connection', 'fastener'],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_12',
+      name: 'RBE/RBE3 are not modeled properly',
+      keywords: ['rbe', 'rbe3', 'rigid element', 'constraint', 'coupling'],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_13',
+      name: 'Incorrect loads and Boundary Condition',
+      keywords: [
+        'loads',
+        'boundary condition',
+        'load application',
+        'force',
+        'constraint',
+      ],
+    ),
+    // Element/Quality Issues (8)
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_14',
+      name: 'Incorrect connectivity',
+      keywords: [
+        'connectivity',
+        'nodes',
+        'element connectivity',
+        'connection',
+        'incorrect',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_15',
+      name: 'Incorrect degree of element order',
+      keywords: [
+        'degree of element',
+        'order',
+        'linear',
+        'quadratic',
+        'polynomial',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_16',
+      name: 'Incorrect element quality',
+      keywords: [
+        'element quality',
+        'distorted',
+        'skewed',
+        'aspect ratio',
+        'defective',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_17',
+      name: 'Incorrect bolt size',
+      keywords: ['bolt', 'size', 'diameter', 'incorrect', 'dimension'],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_18',
+      name: 'Incorrect elements order',
+      keywords: ['elements', 'order', 'sequence', 'incorrect', 'wrong'],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_19',
+      name: 'Incorrect elements quality',
+      keywords: ['elements', 'quality', 'poor', 'defective', 'invalid'],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_20',
+      name: 'Incorrect end loads',
+      keywords: ['end loads', 'terminal loads', 'force', 'moment', 'incorrect'],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_21',
+      name: 'Too refined mesh at the non critical regions',
+      keywords: [
+        'refined mesh',
+        'over meshing',
+        'unnecessary refinement',
+        'non critical',
+        'wasteful',
+      ],
+    ),
+    // Support/Scope Issues (4)
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_22',
+      name: 'Support Gap',
+      keywords: [
+        'support',
+        'gap',
+        'missing support',
+        'incomplete support',
+        'void',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_23',
+      name: 'Support Location',
+      keywords: [
+        'support',
+        'location',
+        'positioning',
+        'placement',
+        'incorrect position',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_24',
+      name: 'Incorrect Scope',
+      keywords: ['scope', 'boundary', 'region', 'area', 'out of scope'],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_25',
+      name: 'free pages',
+      keywords: ['free pages', 'blank pages', 'empty', 'unneeded'],
+    ),
+    // Material/Properties (2)
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_26',
+      name: 'Incorrect mass modeling',
+      keywords: ['mass', 'mass modeling', 'density', 'weight', 'incorrect'],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_27',
+      name: 'Incorrect material properties',
+      keywords: [
+        'material',
+        'properties',
+        'young modulus',
+        'poisson',
+        'density',
+        'incorrect',
+      ],
+    ),
+    // Output/Request Issues (3)
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_28',
+      name: 'Incorrect global output request',
+      keywords: [
+        'global output',
+        'output request',
+        'results request',
+        'missing output',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_29',
+      name: 'Incorrect loadstep creation',
+      keywords: [
+        'loadstep',
+        'load step',
+        'step creation',
+        'load case',
+        'step definition',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_30',
+      name: 'Incorrect output request',
+      keywords: ['output', 'request', 'results', 'incorrect', 'missing'],
+    ),
+    // Results/Analysis Issues (5)
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_31',
+      name: 'Incorrect Interpretation',
+      keywords: [
+        'interpretation',
+        'analysis',
+        'conclusion',
+        'incorrect',
+        'misunderstood',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_32',
+      name: 'Incorrect Results location and Values',
+      keywords: [
+        'results',
+        'values',
+        'location',
+        'incorrect',
+        'wrong',
+        'mismatch',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_33',
+      name: 'Incorrect Observation',
+      keywords: ['observation', 'comment', 'note', 'incorrect', 'inaccurate'],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_34',
+      name: 'Incorrect Naming',
+      keywords: ['naming', 'name', 'label', 'title', 'incorrect', 'misspelled'],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_35',
+      name: 'Missing Results Plot',
+      keywords: ['results', 'plot', 'graph', 'chart', 'missing', 'absent'],
+    ),
+    // Documentation (3)
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_36',
+      name: 'Incomplete conclusion, suggestions',
+      keywords: [
+        'conclusion',
+        'suggestions',
+        'incomplete',
+        'missing',
+        'recommendations',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_37',
+      name: 'Template not followed',
+      keywords: [
+        'template',
+        'followed',
+        'not followed',
+        'deviation',
+        'non compliance',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_38',
+      name: 'Checklist not followed',
+      keywords: [
+        'checklist',
+        'followed',
+        'not followed',
+        'incomplete',
+        'skipped',
+      ],
+    ),
+    // Process (3)
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_39',
+      name: 'Planning sheet not followed',
+      keywords: [
+        'planning sheet',
+        'plan',
+        'not followed',
+        'deviation',
+        'unplanned',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_40',
+      name: 'Folder Structure not followed',
+      keywords: [
+        'folder structure',
+        'directory',
+        'organization',
+        'not followed',
+        'incorrect',
+      ],
+    ),
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_41',
+      name: 'Name/revision report incorrect',
+      keywords: [
+        'name',
+        'revision',
+        'report',
+        'incorrect',
+        'wrong',
+        'mismatch',
+      ],
+    ),
+    // Other (1)
+    DefectCategory(
+      id: 'cat_${DateTime.now().microsecondsSinceEpoch}_42',
+      name: 'Typo Textual Error',
+      keywords: ['typo', 'spelling', 'grammar', 'text', 'error', 'mistake'],
+    ),
+  ];
+}
+
 // Defect Category Manager Dialog
 class _DefectCategoryManager extends StatefulWidget {
   final List<DefectCategory> categories;
@@ -1477,6 +1885,12 @@ class _DefectCategoryManagerState extends State<_DefectCategoryManager> {
     }
   }
 
+  void _loadDefaultCategories() {
+    setState(() {
+      _categories = _getDefaultDefectCategories();
+    });
+  }
+
   void _deleteCategory(int index) {
     setState(() {
       _categories.removeAt(index);
@@ -1488,8 +1902,8 @@ class _DefectCategoryManagerState extends State<_DefectCategoryManager> {
     return AlertDialog(
       title: const Text('Manage Defect Categories'),
       content: SizedBox(
-        width: 500,
-        height: 400,
+        width: 700,
+        height: 500,
         child: Column(
           children: [
             Expanded(
@@ -1501,24 +1915,67 @@ class _DefectCategoryManagerState extends State<_DefectCategoryManager> {
                       itemCount: _categories.length,
                       itemBuilder: (ctx, i) {
                         final cat = _categories[i];
-                        return ListTile(
-                          title: Text(cat.name),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _deleteCategory(i),
+                        return Card(
+                          margin: const EdgeInsets.symmetric(
+                            vertical: 4,
+                            horizontal: 0,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: ListTile(
+                              title: Text(
+                                cat.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: cat.keywords.isNotEmpty
+                                  ? Text(
+                                      'Keywords: ${cat.keywords.join(", ")}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    )
+                                  : null,
+                              leading: Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade300,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(
+                                  Icons.delete,
+                                  color: Colors.red,
+                                ),
+                                onPressed: () => _deleteCategory(i),
+                              ),
+                            ),
                           ),
                         );
                       },
                     ),
             ),
             const Divider(),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: ElevatedButton.icon(
-                onPressed: _isSaving ? null : _addCategory,
-                icon: const Icon(Icons.add),
-                label: const Text('Add Category'),
-              ),
+            Wrap(
+              spacing: 8,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _isSaving ? null : _loadDefaultCategories,
+                  icon: const Icon(Icons.download),
+                  label: const Text('Load Default Categories'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _isSaving ? null : _addCategory,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Category'),
+                ),
+              ],
             ),
           ],
         ),

@@ -11,6 +11,7 @@ import '../services/template_service.dart';
 import '../services/stage_service.dart';
 import '../services/phase_checklist_service.dart';
 import '../services/project_checklist_service.dart';
+import '../services/defect_categorization_service.dart';
 import '../controllers/auth_controller.dart';
 import '../pages/employee_pages/checklist_controller.dart';
 import '../services/checklist_answer_service.dart';
@@ -54,6 +55,10 @@ class AppBindings extends Bindings {
     );
     Get.put<ProjectChecklistService>(
       ProjectChecklistService(Get.find<SimpleHttp>()),
+      permanent: true,
+    );
+    Get.put<DefectCategorizationService>(
+      DefectCategorizationService(Get.find<SimpleHttp>()),
       permanent: true,
     );
 

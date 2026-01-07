@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:quality_review/pages/login.dart';
 import 'bindings/app_bindings.dart';
-//abc
+
 void main() {
   runApp(const MyApp());
 }
