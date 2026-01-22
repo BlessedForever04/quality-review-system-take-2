@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:quality_review/components/admin_sidebar.dart';
+import 'package:quality_review/pages/admin_pages/admin_checklist_template_page.dart';
 import 'package:quality_review/pages/admin_pages/admin_dashboard_page.dart';
 import 'package:quality_review/pages/admin_pages/employee_page.dart';
 import '../../controllers/auth_controller.dart';
@@ -10,7 +11,11 @@ class AdminMainLayout extends StatelessWidget {
   AdminMainLayout({super.key});
 
   final RxInt _selectedIndex = 0.obs;
-  final pages = const [AdminDashboardPage(), EmployeePage()];
+  final pages = const [
+    AdminDashboardPage(),
+    EmployeePage(),
+    AdminChecklistTemplatePage(),
+  ];
 
   @override
   Widget build(BuildContext context) {
