@@ -109,7 +109,7 @@ class _MyProjectDetailPageState extends State<MyProjectDetailPage> {
                       child: CircularProgressIndicator(),
                     ),
                   )
-                : _buildAssignedEmployeesSection(),
+                : buildAssignedEmployeesSection(),
             const SizedBox(height: 32),
             if (_showStartButton()) _buildStartButton(),
             const SizedBox(height: 16),
@@ -149,7 +149,7 @@ class _MyProjectDetailPageState extends State<MyProjectDetailPage> {
     );
   }
 
-  Widget _buildAssignedEmployeesSection() {
+  Widget buildAssignedEmployeesSection() {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

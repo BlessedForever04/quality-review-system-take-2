@@ -174,12 +174,13 @@ class _EmployeeProjectDetailsPageState
                       },
                     ),
                     const SizedBox(height: 24),
-                    _RoleAssignmentSections(
-                      teamCtrl: _teamCtrl,
-                      details: details,
-                      projectId: details.project.id,
-                      projectsCtrl: _projectsCtrl,
-                    ),
+                    if (details.project.status == 'Not Started')
+                      _RoleAssignmentSections(
+                        teamCtrl: _teamCtrl,
+                        details: details,
+                        projectId: details.project.id,
+                        projectsCtrl: _projectsCtrl,
+                      ),
                   ],
                 ),
               ),
@@ -287,66 +288,50 @@ class _PhaseCardsState extends State<_PhaseCards> {
             final borderColor = differs
                 ? Colors.redAccent
                 : (isActive ? Colors.green : Colors.blueGrey);
-            return GestureDetector(
-              onTap: canOpen
-                  ? () => widget.onOpenChecklist(p)
-                  : () {
-                      Get.snackbar(
-                        'Locked',
-                        'Phase $p is locked. Complete Phase ${p - 1} first.',
-                        snackPosition: SnackPosition.BOTTOM,
-                      );
-                    },
-              child: Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: BorderSide(color: borderColor, width: 1),
-                ),
-                color: cardColor,
-                child: Container(
-                  width: 220,
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: isActive
-                            ? Colors.green
-                            : (canOpen
-                                  ? Colors.blueGrey
-                                  : Colors.grey.shade300),
-                        child: Text(
-                          '$p',
-                          style: const TextStyle(color: Colors.white),
-                        ),
+            return Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(color: borderColor, width: 1),
+              ),
+              color: cardColor,
+              child: Container(
+                width: 220,
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: isActive
+                          ? Colors.green
+                          : (canOpen ? Colors.blueGrey : Colors.grey.shade300),
+                      child: Text(
+                        '$p',
+                        style: const TextStyle(color: Colors.white),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Phase $p',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                if (differs) _Badge(label: 'Answers differ'),
-                                if (isOld) _Badge(label: 'View only'),
-                                if (!canOpen) _Badge(label: 'Locked'),
-                                if (isActive) _Badge(label: 'Active'),
-                              ],
-                            ),
-                          ],
-                        ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Phase $p',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              if (differs) _Badge(label: 'Answers differ'),
+                              if (isOld) _Badge(label: 'View only'),
+                              if (!canOpen) _Badge(label: 'Locked'),
+                              if (isActive) _Badge(label: 'Active'),
+                            ],
+                          ),
+                        ],
                       ),
-                      const Icon(Icons.chevron_right),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             );

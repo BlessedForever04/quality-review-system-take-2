@@ -1629,13 +1629,13 @@ class _RoleColumn extends StatelessWidget {
                                           actions: [
                                             TextButton(
                                               onPressed: () =>
-                                                  Navigator.of(ctx).pop(null),
+                                                  Get.back(result: null),
                                               child: const Text('Cancel'),
                                             ),
                                             TextButton(
-                                              onPressed: () => Navigator.of(
-                                                ctx,
-                                              ).pop(ctrl.text.trim()),
+                                              onPressed: () => Get.back(
+                                                result: ctrl.text.trim(),
+                                              ),
                                               child: const Text('Save'),
                                             ),
                                           ],
@@ -1686,12 +1686,12 @@ class _RoleColumn extends StatelessWidget {
                                           actions: [
                                             TextButton(
                                               onPressed: () =>
-                                                  Navigator.of(ctx).pop(false),
+                                                  Get.back(result: false),
                                               child: const Text('Cancel'),
                                             ),
                                             TextButton(
                                               onPressed: () =>
-                                                  Navigator.of(ctx).pop(true),
+                                                  Get.back(result: true),
                                               child: const Text('Delete'),
                                             ),
                                           ],
@@ -1832,10 +1832,9 @@ class _RoleColumn extends StatelessWidget {
                                                               actions: [
                                                                 TextButton(
                                                                   onPressed: () =>
-                                                                      Navigator.of(
-                                                                        ctx,
-                                                                      ).pop(
-                                                                        false,
+                                                                      Get.back(
+                                                                        result:
+                                                                            false,
                                                                       ),
                                                                   child:
                                                                       const Text(
@@ -1844,10 +1843,9 @@ class _RoleColumn extends StatelessWidget {
                                                                 ),
                                                                 TextButton(
                                                                   onPressed: () =>
-                                                                      Navigator.of(
-                                                                        ctx,
-                                                                      ).pop(
-                                                                        true,
+                                                                      Get.back(
+                                                                        result:
+                                                                            true,
                                                                       ),
                                                                   child:
                                                                       const Text(
@@ -2427,6 +2425,21 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                 }
               : null,
         ),
+        // Allow clearing an existing answer when editable
+        if (widget.editable && selectedOption != null)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () async {
+                setState(() {
+                  selectedOption = null;
+                });
+                await _updateAnswer();
+              },
+              icon: const Icon(Icons.clear, size: 18),
+              label: const Text('Clear answer'),
+            ),
+          ),
         Row(
           children: [
             Expanded(
