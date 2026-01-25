@@ -65,20 +65,6 @@ class TemplateService {
     }
   }
 
-  /// Update phase names (custom phase metadata)
-  /// [phaseNames] is a map of stage identifiers to custom names
-  /// Example: {'stage1': 'Kickoff Review', 'stage2': 'Design Phase'}
-  Future<void> updatePhaseNames(Map<String, String> phaseNames) async {
-    try {
-      _ensureToken();
-      await http.patchJson(Uri.parse('$_baseUrl/phase-names'), {
-        'phaseNames': phaseNames,
-      });
-    } catch (e) {
-      throw Exception('Error updating phase names: $e');
-    }
-  }
-
   /// Add a checklist to a specific stage
   /// [stage] must be in format: stage1, stage2, stage3, stage4, etc.
   /// [checklistName] is the checklist group name
@@ -346,6 +332,70 @@ class TemplateService {
       );
     } catch (e) {
       throw Exception('Error deleting section: $e');
+    }
+  }
+
+  /// Add a new stage to the template
+  /// [stage] must be in format: stage1, stage2, stage3, stage4, etc.
+  /// Add a new stage to the template with optional custom name
+  /// [stage] must be in format: stage1, stage2, stage3, etc.
+  /// [stageName] is optional custom display name for the stage
+  Future<Map<String, dynamic>> addStage({
+    required String stage,
+    String? stageName,
+  }) async {
+    try {
+      _ensureToken();
+      if (!_isValidStage(stage)) {
+        throw Exception(
+          'Invalid stage format. Must be stage1, stage2, stage3, etc.',
+        );
+      }
+
+      final body = {'stage': stage};
+      if (stageName != null && stageName.trim().isNotEmpty) {
+        body['stageName'] = stageName.trim();
+      }
+
+      print('🔵 POST /templates/stages - Body: $body');
+      final response = await http.postJson(Uri.parse('$_baseUrl/stages'), body);
+      print('🟢 POST /templates/stages - Response: $response');
+      return response['data'] as Map<String, dynamic>? ?? response;
+    } catch (e) {
+      print('🔴 POST /templates/stages - Error: $e');
+      throw Exception('Error adding stage: $e');
+    }
+  }
+
+  /// Delete a stage from the template
+  /// [stage] must be in format: stage1, stage2, stage3, stage4, etc.
+  Future<void> deleteStage({required String stage}) async {
+    try {
+      _ensureToken();
+      if (!_isValidStage(stage)) {
+        throw Exception(
+          'Invalid stage format. Must be stage1, stage2, stage3, etc.',
+        );
+      }
+
+      await http.deleteJson(Uri.parse('$_baseUrl/stages/$stage'), {});
+    } catch (e) {
+      throw Exception('Error deleting stage: $e');
+    }
+  }
+
+  /// Get all stages with their names from the template
+  Future<Map<String, String>> getStages() async {
+    try {
+      _ensureToken();
+      final response = await http.getJson(Uri.parse('$_baseUrl/stages'));
+      final stagesData = response['data'] as Map<String, dynamic>? ?? {};
+
+      return stagesData.map((key, value) {
+        return MapEntry(key.toString(), value.toString());
+      });
+    } catch (e) {
+      throw Exception('Error fetching stages: $e');
     }
   }
 }

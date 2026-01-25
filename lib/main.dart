@@ -23,7 +23,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: false,
       ),
       initialBinding: AppBindings(),
-      // Pick initial screen based on restored auth state (reactive)
+      // Pick initial screen based on restored auth state (reactive)F
       home: _HomeRouter(),
     );
   }

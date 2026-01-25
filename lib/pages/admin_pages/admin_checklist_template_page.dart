@@ -43,9 +43,11 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
   // Defect categories
   late List<DefectCategory> _defectCategories;
 
+  // Store template data for calculating next stage numbers
+  Map<String, dynamic> _templateData = {};
+
   bool _isLoading = true;
   String? _errorMessage;
-  bool _hasUnsavedPhaseChanges = false;
 
   // Getter for TemplateService - ensures it's always available
   TemplateService get _templateService => Get.find<TemplateService>();
@@ -54,14 +56,10 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
   void initState() {
     super.initState();
 
-    // Initialize with default 3 phases (for backwards compatibility)
-    _phases = [
-      PhaseModel(id: 'p1', name: 'Phase 1', stage: 'stage1', groups: []),
-      PhaseModel(id: 'p2', name: 'Phase 2', stage: 'stage2', groups: []),
-      PhaseModel(id: 'p3', name: 'Phase 3', stage: 'stage3', groups: []),
-    ];
+    // Start with empty phases list - will be populated from backend
+    _phases = [];
 
-    _tabController = TabController(length: _phases.length, vsync: this);
+    _tabController = TabController(length: 0, vsync: this);
     _defectCategories = [];
 
     // Load template from backend
@@ -85,45 +83,46 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
       // Fetch template from backend
       final templateData = await _templateService.fetchTemplate();
 
-      // Load phase names from metadata if available
-      final phaseMetadata = templateData['phaseNames'] as Map<String, dynamic>?;
-      final newPhases = <PhaseModel>[..._phases];
+      // Store template data for future calculations
+      _templateData = templateData;
 
-      if (phaseMetadata != null) {
-        // Update phase names from saved metadata
-        for (var phase in newPhases) {
-          final savedName = phaseMetadata[phase.stage];
-          if (savedName != null) {
-            phase.name = savedName.toString();
-          }
-        }
-        // Check for additional phases beyond the default 3
-        final allStages =
-            (phaseMetadata.keys.toList() as List<dynamic>)
-                .map((e) => e.toString())
-                .toList()
-              ..sort();
-        for (var stage in allStages) {
-          if (!newPhases.any((p) => p.stage == stage)) {
-            // Add new phase from metadata
-            final phaseNum = int.tryParse(stage.replaceAll('stage', '')) ?? 0;
-            newPhases.add(
-              PhaseModel(
-                id: 'p$phaseNum',
-                name: phaseMetadata[stage].toString(),
-                stage: stage,
-                groups: [],
-              ),
-            );
-          }
-        }
-      }
+      // Build phases list from actual stage arrays in template
+      // Source of truth: all stageN fields in the template
+      final newPhases = <PhaseModel>[];
 
-      // Parse phases dynamically from backend data
-      for (var i = 0; i < newPhases.length; i++) {
-        final phase = newPhases[i];
-        final stageData = templateData[phase.stage] ?? [];
-        phase.groups = _parseStageData(stageData);
+      // Get all stage keys from template
+      final stageKeys =
+          templateData.keys
+              .where((key) => key.toString().startsWith('stage'))
+              .toList()
+              .cast<String>()
+            ..sort((a, b) {
+              final numA = int.tryParse(a.replaceAll('stage', '')) ?? 0;
+              final numB = int.tryParse(b.replaceAll('stage', '')) ?? 0;
+              return numA.compareTo(numB);
+            });
+
+      print('📋 Loading template with stages: ${stageKeys.join(", ")}');
+
+      // Get custom stage names if available
+      final stageNames =
+          (templateData['stageNames'] as Map<String, dynamic>?) ?? {};
+
+      for (var stage in stageKeys) {
+        final phaseNum = int.tryParse(stage.replaceAll('stage', '')) ?? 0;
+        final stageData = templateData[stage] ?? [];
+
+        // Use custom name if available, otherwise auto-generate
+        final displayName = (stageNames[stage] as String?) ?? 'Phase $phaseNum';
+
+        newPhases.add(
+          PhaseModel(
+            id: 'p$phaseNum',
+            name: displayName,
+            stage: stage,
+            groups: _parseStageData(stageData),
+          ),
+        );
       }
 
       // Parse defect categories
@@ -133,7 +132,6 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
 
       setState(() {
         _phases = newPhases;
-        _hasUnsavedPhaseChanges = false;
         _defectCategories = parsedCategories;
 
         // Update tab controller if phase count changed
@@ -293,47 +291,70 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
     });
   }
 
-  /// Add a new phase
+  /// Add a new phase with custom name
   Future<void> _addPhase() async {
-    final name = await _promptPhaseName();
-    if (name == null || name.isEmpty) return;
+    // First, ask user for custom stage name
+    final stageName = await _promptStageName();
+    if (stageName == null || stageName.trim().isEmpty) return;
 
-    final newPhaseIndex = _phases.length + 1;
-    final newPhase = PhaseModel(
-      id: 'p$newPhaseIndex',
-      name: name,
-      stage: 'stage$newPhaseIndex',
-      groups: [],
-    );
+    setState(() => _isLoading = true);
 
-    // Dispose old controller before creating new one
-    _tabController.dispose();
-    _phases.add(newPhase);
+    try {
+      // Calculate next stage number by checking all stageN keys in the actual template data
+      int nextStageNum = 1;
 
-    // Create new tab controller with updated length
-    _tabController = TabController(length: _phases.length, vsync: this);
+      // Scan all keys in templateData for stageN pattern to find highest existing number
+      _templateData.forEach((key, value) {
+        if (key.toString().startsWith('stage')) {
+          final numStr = key.toString().replaceAll('stage', '');
+          final num = int.tryParse(numStr);
+          if (num != null && num >= nextStageNum) {
+            nextStageNum = num + 1;
+          }
+        }
+      });
 
-    setState(() {
-      _hasUnsavedPhaseChanges = true;
-    });
+      final newStage = 'stage$nextStageNum';
 
-    // Navigate to new phase using post-frame callback
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _phases.isNotEmpty) {
-        _tabController.animateTo(_phases.length - 1);
+      print('📋 Adding new stage: $newStage with name: "$stageName"');
+      print(
+        '   Existing stages: ${_templateData.keys.where((k) => k.toString().startsWith('stage')).toList()}',
+      );
+
+      // Add stage to backend with custom name
+      await _templateService.addStage(stage: newStage, stageName: stageName);
+
+      // Reload template from backend
+      await _loadTemplate();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('"$stageName" stage added successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
-    });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding phase: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
-  /// Rename an existing phase
-  Future<void> _renamePhase(PhaseModel phase) async {
-    final name = await _promptPhaseName(initial: phase.name);
-    if (name == null || name.isEmpty) return;
-
-    setState(() {
-      phase.name = name;
-      _hasUnsavedPhaseChanges = true;
-    });
+  /// Prompt for custom stage name
+  Future<String?> _promptStageName() async {
+    return await _textPrompt(
+      title: 'Add New Stage',
+      label: 'Stage Name (e.g., Planning, Design, Testing)',
+      initial: null,
+    );
   }
 
   /// Delete a phase
@@ -345,76 +366,34 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
     );
     if (confirm != true) return;
 
-    final phaseIndex = _phases.indexOf(phase);
-    final currentIndex = _tabController.index;
-
-    // Dispose old controller
-    _tabController.dispose();
-
-    _phases.removeAt(phaseIndex);
-
-    // Create new controller with updated length
-    _tabController = TabController(length: _phases.length, vsync: this);
-
-    // Adjust index if needed
-    if (_phases.isNotEmpty) {
-      _tabController.index = currentIndex >= _phases.length
-          ? _phases.length - 1
-          : currentIndex;
-    }
-
-    setState(() {
-      _hasUnsavedPhaseChanges = true;
-    });
-
-    // Auto-save after deletion
-    _savePhaseConfiguration();
-  }
-
-  /// Prompt for phase name
-  Future<String?> _promptPhaseName({String? initial}) async {
-    return await _textPrompt(
-      title: initial == null ? 'Add Phase' : 'Rename Phase',
-      label: 'Phase Name',
-      initial: initial,
-    );
-  }
-
-  /// Save phase configuration to backend
-  Future<void> _savePhaseConfiguration() async {
-    if (!_hasUnsavedPhaseChanges) return;
-
     setState(() => _isLoading = true);
 
     try {
-      // Build phase names map
-      final phaseNames = <String, String>{};
-      for (var phase in _phases) {
-        phaseNames[phase.stage] = phase.name;
-      }
+      print('🗑️ Deleting phase: ${phase.name} (${phase.stage})');
 
-      // Save to backend via template service
-      await _templateService.updatePhaseNames(phaseNames);
+      // Delete stage from backend
+      await _templateService.deleteStage(stage: phase.stage);
 
-      setState(() {
-        _hasUnsavedPhaseChanges = false;
-        _isLoading = false;
-      });
+      print('✅ Phase deleted successfully from backend');
+
+      // Reload template
+      await _loadTemplate();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Phase configuration saved successfully'),
+          SnackBar(
+            content: Text('Phase "${phase.name}" deleted successfully'),
             backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
+      print('❌ Error deleting phase: $e');
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error saving phases: $e'),
+            content: Text('Error deleting phase: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -422,6 +401,7 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
     }
   }
 
+  /// Prompt for phase name
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -458,18 +438,6 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
                     label: const Text('Add Phase'),
                   ),
                   const SizedBox(width: 8),
-                  // Save Phases button (visible when there are unsaved changes)
-                  if (_hasUnsavedPhaseChanges)
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF9800),
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: _isLoading ? null : _savePhaseConfiguration,
-                      icon: const Icon(Icons.save),
-                      label: const Text('Save Phases'),
-                    ),
-                  if (_hasUnsavedPhaseChanges) const SizedBox(width: 8),
                   // Reload button
                   IconButton(
                     icon: const Icon(Icons.refresh),
@@ -566,23 +534,11 @@ class _AdminChecklistTemplatePageState extends State<AdminChecklistTemplatePage>
                                 PopupMenuButton<String>(
                                   icon: const Icon(Icons.more_vert, size: 16),
                                   onSelected: (action) {
-                                    if (action == 'rename') {
-                                      _renamePhase(phase);
-                                    } else if (action == 'delete') {
+                                    if (action == 'delete') {
                                       _deletePhase(phase);
                                     }
                                   },
                                   itemBuilder: (context) => [
-                                    const PopupMenuItem(
-                                      value: 'rename',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.edit, size: 18),
-                                          SizedBox(width: 8),
-                                          Text('Rename'),
-                                        ],
-                                      ),
-                                    ),
                                     const PopupMenuItem(
                                       value: 'delete',
                                       child: Row(
