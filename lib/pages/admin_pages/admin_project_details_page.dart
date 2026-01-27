@@ -5,6 +5,7 @@ import 'package:quality_review/controllers/project_details_controller.dart';
 import 'package:quality_review/controllers/projects_controller.dart';
 import 'package:quality_review/controllers/team_controller.dart';
 import 'package:quality_review/models/role.dart';
+import 'package:quality_review/models/project_membership.dart';
 import 'package:quality_review/services/project_membership_service.dart';
 import 'package:quality_review/services/project_service.dart';
 import 'package:quality_review/services/role_service.dart';
@@ -28,6 +29,10 @@ class AdminProjectDetailsPage extends StatefulWidget {
 class _AdminProjectDetailsPageState extends State<AdminProjectDetailsPage> {
   late ProjectDetailsController _detailsCtrl;
   bool _isLoading = true;
+  bool _loadingAssignments = true;
+  List<ProjectMembership> _teamLeaders = [];
+  List<ProjectMembership> _executors = [];
+  List<ProjectMembership> _reviewers = [];
 
   @override
   void initState() {
@@ -39,6 +44,7 @@ class _AdminProjectDetailsPageState extends State<AdminProjectDetailsPage> {
     );
     _detailsCtrl.seed(widget.project);
     _fetchLatestProjectData();
+    _loadAssignments();
   }
 
   Future<void> _fetchLatestProjectData() async {
@@ -53,6 +59,36 @@ class _AdminProjectDetailsPageState extends State<AdminProjectDetailsPage> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  Future<void> _loadAssignments() async {
+    setState(() => _loadingAssignments = true);
+    try {
+      if (Get.isRegistered<ProjectMembershipService>()) {
+        final svc = Get.find<ProjectMembershipService>();
+        final memberships = await svc.getProjectMembers(widget.project.id);
+        final leaders = memberships
+            .where((m) => (m.roleName?.toLowerCase() ?? '') == 'sdh')
+            .toList();
+        final execs = memberships
+            .where((m) => (m.roleName?.toLowerCase() ?? '') == 'executor')
+            .toList();
+        final reviewers = memberships
+            .where((m) => (m.roleName?.toLowerCase() ?? '') == 'reviewer')
+            .toList();
+        if (mounted) {
+          setState(() {
+            _teamLeaders = leaders;
+            _executors = execs;
+            _reviewers = reviewers;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[AdminProjectDetail] loadAssignments error: $e');
+    } finally {
+      if (mounted) setState(() => _loadingAssignments = false);
     }
   }
 
@@ -152,11 +188,30 @@ class _AdminProjectDetailsPageState extends State<AdminProjectDetailsPage> {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    Text(
+                      'Assigned Team Members',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 12),
+                    _loadingAssignments
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(24.0),
+                              child: CircularProgressIndicator(),
+                            ),
+                          )
+                        : _AssignedTeamGrid(
+                            leaders: _teamLeaders,
+                            executors: _executors,
+                            reviewers: _reviewers,
+                          ),
+                    const SizedBox(height: 24),
                     _RoleAssignmentSections(
                       teamCtrl: _teamCtrl,
                       details: details,
                       projectId: details.project.id,
                       projectsCtrl: _projectsCtrl,
+                      onAssignmentsChanged: _loadAssignments,
                     ),
                   ],
                 ),
@@ -459,16 +514,160 @@ class _AdminProjectDetailsPageState extends State<AdminProjectDetailsPage> {
   }
 }
 
+class _AssignedTeamGrid extends StatelessWidget {
+  final List<ProjectMembership> leaders;
+  final List<ProjectMembership> executors;
+  final List<ProjectMembership> reviewers;
+  const _AssignedTeamGrid({
+    required this.leaders,
+    required this.executors,
+    required this.reviewers,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: _RoleCard(title: 'SDH', color: Colors.blue, members: leaders),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: _RoleCard(
+            title: 'Executors',
+            color: Colors.green,
+            members: executors,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: _RoleCard(
+            title: 'Reviewers',
+            color: Colors.orange,
+            members: reviewers,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RoleCard extends StatelessWidget {
+  final String title;
+  final Color color;
+  final List<ProjectMembership> members;
+  const _RoleCard({
+    required this.title,
+    required this.color,
+    required this.members,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.people, color: color, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text('${members.length}'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (members.isEmpty)
+              Text(
+                'No members assigned yet',
+                style: TextStyle(color: Colors.grey.shade600),
+              )
+            else
+              Column(
+                children: members
+                    .map(
+                      (m) => Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundColor: color.withOpacity(0.14),
+                              child: Text(
+                                (m.userName ?? 'U')
+                                    .trim()
+                                    .padRight(1)
+                                    .substring(0, 1)
+                                    .toUpperCase(),
+                                style: TextStyle(color: color),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                m.userName ?? 'Unknown',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _RoleAssignmentSections extends StatefulWidget {
   final TeamController teamCtrl;
   final ProjectDetailsController details;
   final String projectId;
   final ProjectsController projectsCtrl;
+  final Future<void> Function()? onAssignmentsChanged;
   const _RoleAssignmentSections({
     required this.teamCtrl,
     required this.details,
     required this.projectId,
     required this.projectsCtrl,
+    this.onAssignmentsChanged,
   });
 
   @override
@@ -633,6 +832,9 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
         Get.snackbar("Success", 'Role assignments saved');
       }
       await _hydrateMemberships();
+      if (widget.onAssignmentsChanged != null) {
+        await widget.onAssignmentsChanged!();
+      }
     } catch (e) {
       if (mounted) {
         Get.snackbar(

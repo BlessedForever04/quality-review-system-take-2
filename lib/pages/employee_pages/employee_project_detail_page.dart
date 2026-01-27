@@ -203,6 +203,7 @@ class _EmployeeProjectDetailsPageState
                         details: details,
                         projectId: details.project.id,
                         projectsCtrl: _projectsCtrl,
+                        onAssignmentsChanged: _loadAssignments,
                       ),
                   ],
                 ),
@@ -626,11 +627,13 @@ class _RoleAssignmentSections extends StatefulWidget {
   final ProjectDetailsController details;
   final String projectId;
   final ProjectsController projectsCtrl;
+  final Future<void> Function()? onAssignmentsChanged;
   const _RoleAssignmentSections({
     required this.teamCtrl,
     required this.details,
     required this.projectId,
     required this.projectsCtrl,
+    this.onAssignmentsChanged,
   });
 
   @override
@@ -790,6 +793,9 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
         );
       }
       await _hydrateMemberships();
+      if (widget.onAssignmentsChanged != null) {
+        await widget.onAssignmentsChanged!();
+      }
     } catch (e) {
       if (mounted) {
         Get.snackbar(

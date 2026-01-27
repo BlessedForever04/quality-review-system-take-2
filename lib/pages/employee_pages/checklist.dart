@@ -401,12 +401,25 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       final stageId = (stage['_id'] ?? '').toString();
       _currentStageId = stageId;
 
-      // Load loopback counter from stage data
-      final loopbackCount = (stage['loopback_count'] ?? 0) as int;
-      setState(() {
-        _loopbackCounter = loopbackCount;
-      });
-      print('✓ Stage found: $stageId, Loopback Count: $loopbackCount');
+      // Load loopback counter from the dedicated API endpoint instead of stage data
+      // This ensures we always get the latest persisted value from the backend
+      try {
+        final loopbackCount = await _approvalService.getRevertCount(
+          widget.projectId,
+          phase,
+        );
+        setState(() {
+          _loopbackCounter = loopbackCount;
+        });
+        print(
+          '✓ Stage found: $stageId, Loopback Count: $loopbackCount (from API)',
+        );
+      } catch (e) {
+        print('⚠️ Error loading loopback counter: $e, defaulting to 0');
+        setState(() {
+          _loopbackCounter = 0;
+        });
+      }
 
       // Step 3: Try to fetch from new ProjectChecklist API first
       List<Question> loadedChecklist = [];
@@ -998,8 +1011,17 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       // active represents the next phase that's now active
       // active = 1 means phase 1 is active, active = 2 means phase 2 is active, etc.
       _activePhase = active;
-      // Clamp selected UI phase within [1, _activePhase]
-      if (_selectedPhase > _activePhase) _selectedPhase = _activePhase;
+      // Only clamp selected phase for non-SDH users
+      // SDH can view any phase including pending ones
+      final currentUserName = Get.isRegistered<AuthController>()
+          ? Get.find<AuthController>().currentUser.value?.name
+          : null;
+      final isSDH = currentUserName != null && authRoleIsSDH(currentUserName);
+      if (!isSDH) {
+        // Non-SDH users: clamp to active phase
+        if (_selectedPhase > _activePhase) _selectedPhase = _activePhase;
+      }
+      // Always ensure phase is at least 1
       if (_selectedPhase < 1) _selectedPhase = 1;
     });
     // Refresh approval/compare for the currently selected phase
@@ -1068,6 +1090,10 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         canEditExecutor && phaseEditable && !executorSubmitted;
     final canEditReviewerPhase =
         canEditReviewer && phaseEditable && !reviewerSubmitted;
+
+    // Check if current phase is already approved (no more actions allowed)
+    final phaseAlreadyApproved = _approvalStatus?['status'] == 'approved';
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -1076,7 +1102,140 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         ),
         backgroundColor: Colors.blue,
         actions: [
-          // Phase selector
+          // Spacer to push all content to the right side
+          const Spacer(),
+          // Approve and Revert buttons in the middle
+          if (isSDH) ...[
+            ElevatedButton.icon(
+              onPressed: (reviewerSubmitted && !phaseAlreadyApproved)
+                  ? () async {
+                      try {
+                        await _approvalService.approve(
+                          widget.projectId,
+                          _selectedPhase,
+                        );
+
+                        checklistCtrl.clearProjectCache(widget.projectId);
+                        await _computeActivePhase();
+
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Phase ${_selectedPhase} approved! Next phase is now active.',
+                              ),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+
+                        await _loadChecklistData();
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Approve failed: $e')),
+                          );
+                        }
+                      }
+                    }
+                  : () {
+                      if (phaseAlreadyApproved) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Phase already approved!'),
+                            backgroundColor: Colors.blue,
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Waiting for reviewer response...'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      }
+                    },
+              icon: const Icon(Icons.check_circle),
+              label: const Text('Approve Phase'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: (reviewerSubmitted && !phaseAlreadyApproved)
+                    ? Colors.green
+                    : Colors.grey,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: (reviewerSubmitted && !phaseAlreadyApproved)
+                  ? () async {
+                      try {
+                        await _approvalService.revert(
+                          widget.projectId,
+                          _selectedPhase,
+                        );
+
+                        // Increment loopback counter on backend
+                        await _approvalService.incrementRevertCount(
+                          widget.projectId,
+                          _selectedPhase,
+                        );
+
+                        checklistCtrl.clearProjectCache(widget.projectId);
+                        await _computeActivePhase();
+
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Phase ${_selectedPhase} reverted. Executor and Reviewer can edit again.',
+                              ),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                        }
+
+                        // Reload data - loopback counter will be fetched from API
+                        await _loadChecklistData();
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Revert failed: $e')),
+                          );
+                        }
+                      }
+                    }
+                  : () {
+                      if (phaseAlreadyApproved) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Phase already approved! Cannot revert.',
+                            ),
+                            backgroundColor: Colors.blue,
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Waiting for reviewer response...'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      }
+                    },
+              icon: const Icon(Icons.undo),
+              label: const Text('Revert Phase'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: (reviewerSubmitted && !phaseAlreadyApproved)
+                    ? Colors.orange
+                    : Colors.grey,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+          // Spacer to create gap before right-aligned items
+          const Spacer(),
+          // Phase selector on the right
           DropdownButtonHideUnderline(
             child: DropdownButton<int>(
               value: _selectedPhase,
@@ -1173,6 +1332,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
               },
             ),
           ),
+          // Refresh button on far right
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             tooltip: 'Reload checklist data',
@@ -1185,90 +1345,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                     _loadChecklistData();
                   },
           ),
-          IconButton(
-            icon: Icon(
-              _editMode ? Icons.check : Icons.edit,
-              color: Colors.white,
-            ),
-            tooltip: _editMode ? 'Exit edit mode' : 'Enter edit mode',
-            onPressed: () {
-              setState(() => _editMode = !_editMode);
-            },
-          ),
-          if (isSDH)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.admin_panel_settings, color: Colors.white),
-              onSelected: (value) async {
-                if (value == 'approve') {
-                  try {
-                    await _approvalService.approve(
-                      widget.projectId,
-                      _selectedPhase, // phase number
-                    );
-
-                    // Clear cache
-                    checklistCtrl.clearProjectCache(widget.projectId);
-
-                    // Recompute active phase to get newly activated phase
-                    await _computeActivePhase();
-
-                    // Stay on current phase (don't auto-jump)
-                    // This allows SDH to see all phases and current phase details
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Phase ${_selectedPhase} approved! Next phase is now active.',
-                        ),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-
-                    // Reload to show current phase in view-only mode + next phase as active
-                    await _loadChecklistData();
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Approve failed: $e')),
-                    );
-                  }
-                } else if (value == 'revert') {
-                  try {
-                    await _approvalService.revert(
-                      widget.projectId,
-                      _selectedPhase, // phase number
-                    );
-
-                    // Clear submission cache to force reload from backend
-                    checklistCtrl.clearProjectCache(widget.projectId);
-
-                    // Recompute active phase (should go back to current phase)
-                    await _computeActivePhase();
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Phase ${_selectedPhase} reverted. Executor and Reviewer can edit again.',
-                        ),
-                        backgroundColor: Colors.orange,
-                      ),
-                    );
-
-                    // Reload the checklist data to show updated state
-                    await _loadChecklistData();
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Revert failed: $e')),
-                    );
-                  }
-                }
-              },
-              itemBuilder: (ctx) => [
-                const PopupMenuItem(
-                  value: 'approve',
-                  child: Text('Approve SDH'),
-                ),
-                const PopupMenuItem(value: 'revert', child: Text('Revert SDH')),
-              ],
-            ),
         ],
       ),
       body: _isLoadingData
