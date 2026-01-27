@@ -9,6 +9,8 @@ import 'package:quality_review/models/project_membership.dart';
 import 'package:quality_review/services/project_membership_service.dart';
 import 'package:quality_review/services/project_service.dart';
 import 'package:quality_review/services/role_service.dart';
+import 'package:quality_review/services/stage_service.dart';
+import 'package:quality_review/services/approval_service.dart';
 import '../../models/project.dart';
 
 class AdminProjectDetailsPage extends StatefulWidget {
@@ -187,6 +189,8 @@ class _AdminProjectDetailsPageState extends State<AdminProjectDetailsPage> {
                         }),
                       ),
                     ),
+                    const SizedBox(height: 24),
+                    _PhaseOverview(project: details.project),
                     const SizedBox(height: 24),
                     Text(
                       'Assigned Team Members',
@@ -1110,4 +1114,280 @@ class TeamMemberFiltered {
   final String name;
   final String email;
   TeamMemberFiltered(this.id, this.name, this.email);
+}
+
+class _PhaseOverview extends StatefulWidget {
+  final Project project;
+  const _PhaseOverview({required this.project});
+
+  @override
+  State<_PhaseOverview> createState() => _PhaseOverviewState();
+}
+
+class _PhaseOverviewState extends State<_PhaseOverview> {
+  int _activePhase = 1;
+  bool _isProjectCompleted = false;
+  final Map<int, bool> _answersDiffer = {};
+  final List<Map<String, dynamic>> _stages = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPhaseData();
+  }
+
+  Future<void> _loadPhaseData() async {
+    setState(() => _loading = true);
+    try {
+      final stageService = Get.find<StageService>();
+      final stages = await stageService.listStages(widget.project.id);
+
+      if (stages.isEmpty) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+
+      final ApprovalService approvalSvc = Get.find<ApprovalService>();
+      int activePhaseNum = 1;
+      bool allCompleted = false;
+
+      for (int i = 0; i < stages.length; i++) {
+        final phaseNum = i + 1;
+        try {
+          final status = await approvalSvc.getStatus(
+            widget.project.id,
+            phaseNum,
+          );
+          if (status != null && status['status'] == 'approved') {
+            activePhaseNum = phaseNum + 1;
+          } else {
+            break;
+          }
+        } catch (_) {
+          break;
+        }
+      }
+
+      if (activePhaseNum > stages.length) {
+        allCompleted = true;
+        activePhaseNum = stages.length;
+      }
+
+      for (int i = 0; i < stages.length; i++) {
+        final phaseNum = i + 1;
+        try {
+          final cmp = await approvalSvc.compare(widget.project.id, phaseNum);
+          _answersDiffer[phaseNum] = !(cmp['match'] == true);
+        } catch (_) {
+          _answersDiffer[phaseNum] = false;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _stages.clear();
+          _stages.addAll(stages);
+          _activePhase = activePhaseNum;
+          _isProjectCompleted = allCompleted;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _activePhase = 1;
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Phase Overview',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 8),
+        if (_loading)
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+        if (!_loading && _stages.isEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue.shade600),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'No phases available. Phases will be created when the project is started.',
+                      style: TextStyle(color: Colors.black87),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (!_loading && _stages.isNotEmpty) ...[
+          if (_isProjectCompleted)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: Card(
+                color: Colors.blue.shade50,
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.check_circle,
+                        color: Colors.blue.shade700,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          '🎉 Project Completed! All phases have been reviewed and approved.',
+                          style: TextStyle(
+                            color: Colors.blue.shade900,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: _stages.asMap().entries.map((entry) {
+              final index = entry.key;
+              final stage = entry.value;
+              final phaseNum = index + 1;
+              final stageName = (stage['stage_name'] ?? 'Phase $phaseNum')
+                  .toString();
+              final differs = _answersDiffer[phaseNum] == true;
+
+              final isDone = phaseNum < _activePhase || _isProjectCompleted;
+              final isActive = phaseNum == _activePhase && !_isProjectCompleted;
+              final isPending = phaseNum > _activePhase;
+
+              Color cardColor = Colors.white;
+              Color borderColor = Colors.blueGrey;
+              Color avatarColor = Colors.grey.shade300;
+
+              if (differs && !isDone) {
+                cardColor = Colors.red.shade50;
+                borderColor = Colors.redAccent;
+              } else if (_isProjectCompleted) {
+                borderColor = Colors.blue.shade300;
+                avatarColor = Colors.blue.shade300;
+              } else if (isDone) {
+                borderColor = Colors.blue.shade300;
+                avatarColor = Colors.blue.shade300;
+              } else if (isActive) {
+                borderColor = Colors.green;
+                avatarColor = Colors.green;
+              }
+
+              return Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(color: borderColor, width: 1),
+                ),
+                color: cardColor,
+                child: Container(
+                  width: 220,
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: avatarColor,
+                        child: Text(
+                          '$phaseNum',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              stageName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                if (differs && !isDone)
+                                  _PhaseBadge(label: 'Answers differ'),
+                                if (_isProjectCompleted)
+                                  _PhaseBadge(
+                                    label: 'Completed',
+                                    color: Colors.blue.shade100,
+                                  )
+                                else if (isDone)
+                                  _PhaseBadge(
+                                    label: 'Done',
+                                    color: Colors.blue.shade100,
+                                  )
+                                else if (isActive)
+                                  _PhaseBadge(
+                                    label: 'Active',
+                                    color: Colors.green.shade100,
+                                  )
+                                else if (isPending)
+                                  _PhaseBadge(
+                                    label: 'Pending',
+                                    color: Colors.grey.shade200,
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _PhaseBadge extends StatelessWidget {
+  final String label;
+  final Color? color;
+  const _PhaseBadge({required this.label, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color ?? Colors.black12,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(label, style: const TextStyle(fontSize: 10)),
+    );
+  }
 }
