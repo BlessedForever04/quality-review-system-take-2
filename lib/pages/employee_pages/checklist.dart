@@ -4,6 +4,9 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+// import 'package:url_launcher/url_launcher.dart';
 import 'checklist_controller.dart';
 import '../../controllers/auth_controller.dart';
 import '../../services/approval_service.dart';
@@ -12,7 +15,13 @@ import '../../services/phase_checklist_service.dart';
 import '../../services/project_checklist_service.dart';
 import '../../services/template_service.dart';
 import '../../services/defect_categorization_service.dart';
+
 // import '../../config/api_config.dart';
+// Simple backend base URL for uploads; adjust if needed
+const String _backendBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'http://localhost:8000',
+);
 
 enum UploadStatus { pending, uploading, success, failed }
 
@@ -158,6 +167,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   String? _errorMessage;
   bool _editMode = false;
   late final ChecklistController checklistCtrl;
+  late final ApprovalService _approvalService;
   String? _currentStageId;
   bool _isLoadingData = true;
   // Phase numbering: 1, 2, 3... directly maps to stage1, stage2, stage3...
@@ -172,64 +182,45 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   final ScrollController _executorScroll = ScrollController();
   final ScrollController _reviewerScroll = ScrollController();
   final Set<String> _highlightSubs = {};
+  List<Question> checklist = []; // Checklist questions for current phase
+
+  // Defect tracking and category state
   Map<String, int> _defectsByChecklist = {};
   Map<String, int> _checkpointsByChecklist =
       {}; // Track checkpoints per checklist
-  int _defectsTotal = 0;
-  int _totalCheckpoints = 0; // Total number of checkpoints
-  int _loopbackCounter =
-      0; // Track loopback count for current phase (SDH reverts)
-  int _conflictCounter =
-      0; // Track conflict count for current phase (Reviewer reverts to Executor)
-  Map<String, Map<String, dynamic>> _defectCategories = {};
   final Map<String, String?> _selectedDefectCategory = {};
   final Map<String, String?> _selectedDefectSeverity = {};
-  // Session-level tracking: track highest defects seen, not just current
-  int _maxDefectsSeenInSession = 0; // Highest defect count in this session
-  // Reviewer submission summaries per phase
+  Map<String, Map<String, dynamic>> _defectCategories = {};
+
+  // Counters and metrics
+  int _loopbackCounter = 0;
+  int _conflictCounter = 0;
+  int _revertCount = 0;
+  int _defectsTotal = 0;
+  int _totalCheckpoints = 0;
+  int _maxDefectsSeenInSession = 0;
+  int _totalCheckpointsInSession = 0;
+
+  // Persisted reviewer submission summary per phase
   final Map<int, Map<String, dynamic>> _reviewerSubmissionSummaries = {};
-  int _totalCheckpointsInSession = 0; // Total checkpoints for this session
-  // Revert tracking
-  int _revertCount = 0; // Number of times checklist was reverted by SDH
-
-  ApprovalService get _approvalService => Get.find<ApprovalService>();
-
-  late List<Question> checklist;
 
   @override
   void initState() {
     super.initState();
-    checklistCtrl = Get.isRegistered<ChecklistController>()
-        ? Get.find<ChecklistController>()
-        : Get.put(ChecklistController());
-
-    if (widget.initialPhase != null &&
-        widget.initialPhase! >= 1 &&
-        widget.initialPhase! <= 5) {
-      _selectedPhase = widget.initialPhase!;
-    }
-
-    checklist = [];
-
+    // Initialize controllers/services
+    checklistCtrl = Get.find<ChecklistController>();
+    _approvalService = Get.find<ApprovalService>();
+    // Initial load
     _loadChecklistData();
-  }
-
-  Map<String, dynamic>? _getCategoryInfo(String? categoryId) {
-    if (categoryId == null || categoryId.isEmpty) {
-      return null;
-    }
-    final cat = _defectCategories[categoryId];
-    if (cat == null) {
-      return null;
-    }
-    if ((cat['name'] ?? '').isEmpty) {
-      return null;
-    }
-    return cat;
   }
 
   List<Map<String, dynamic>> _getAvailableCategories() {
     return _defectCategories.values.toList();
+  }
+
+  Map<String, dynamic>? _getCategoryInfo(String? categoryId) {
+    if (categoryId == null || categoryId.isEmpty) return null;
+    return _defectCategories[categoryId];
   }
 
   Future<void> _assignDefectCategory(
@@ -2977,6 +2968,9 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
     // Initialize category and severity from parent or initialData
     selectedCategory = widget.selectedCategoryId;
     selectedSeverity = widget.selectedSeverity;
+
+    // Fetch existing images for this checkpoint/subquestion
+    _fetchExistingImages();
   }
 
   void _initializeData() {
@@ -3033,12 +3027,32 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
         type: FileType.image,
       );
       if (result != null && result.files.isNotEmpty) {
-        setState(
-          () => _images = result.files
-              .where((f) => f.bytes != null)
-              .map((f) => {'bytes': f.bytes!, 'name': f.name})
-              .toList(),
-        );
+        // Upload each selected image to backend GridFS, associated by questionId
+        final uploaded = <Map<String, dynamic>>[];
+        for (final f in result.files) {
+          if (f.bytes == null) continue;
+          try {
+            final req = await http.MultipartRequest(
+              'POST',
+              Uri.parse(
+                '$_backendBaseUrl/api/v1/images/${widget.checkpointId ?? widget.subQuestion}',
+              ),
+            );
+            req.files.add(
+              http.MultipartFile.fromBytes('image', f.bytes!, filename: f.name),
+            );
+            final streamed = await req.send();
+            final resp = await http.Response.fromStream(streamed);
+            if (resp.statusCode == 201) {
+              final data = jsonDecode(resp.body) as Map<String, dynamic>;
+              uploaded.add({
+                'fileId': data['fileId'],
+                'filename': data['filename'],
+              });
+            }
+          } catch (_) {}
+        }
+        setState(() => _images = uploaded);
         await _updateAnswer();
       }
     } catch (e) {
@@ -3046,9 +3060,33 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
     }
   }
 
+  Future<void> _fetchExistingImages() async {
+    final qid = widget.checkpointId ?? widget.subQuestion;
+    if (qid == null || qid.isEmpty) return;
+    try {
+      final resp = await http.get(
+        Uri.parse('$_backendBaseUrl/api/v1/images/$qid'),
+      );
+      if (resp.statusCode == 200) {
+        final list = (jsonDecode(resp.body) as List?) ?? [];
+        final imgs = list
+            .whereType<Map>()
+            .map(
+              (m) => {
+                'fileId': (m['_id'] ?? '').toString(),
+                'filename': (m['filename'] ?? '').toString(),
+              },
+            )
+            .where((m) => (m['fileId'] ?? '').toString().isNotEmpty)
+            .toList();
+        if (mounted) setState(() => _images = imgs);
+      }
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
-    final currentCat = _currentSelectedCategory();
+    // final currentCat = _currentSelectedCategory();
     final base = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3139,25 +3177,55 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                 final name = img['name'] is String
                     ? img['name'] as String
                     : null;
-                if (bytes == null) return const SizedBox.shrink();
+                // If we have local bytes (just picked), show memory; else try server fileId
+                final fileId = img['fileId'] is String
+                    ? img['fileId'] as String
+                    : '';
+                if (bytes == null && fileId.isEmpty)
+                  return const SizedBox.shrink();
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: Stack(
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(6),
-                        child: Image.memory(
-                          bytes,
-                          width: 100,
-                          height: 100,
-                          fit: BoxFit.cover,
-                        ),
+                        child: bytes != null
+                            ? Image.memory(
+                                bytes,
+                                width: 100,
+                                height: 100,
+                                fit: BoxFit.cover,
+                              )
+                            : Image.network(
+                                '$_backendBaseUrl/api/v1/images/file/$fileId',
+                                width: 100,
+                                height: 100,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  width: 100,
+                                  height: 100,
+                                  color: Colors.grey.shade300,
+                                  child: const Icon(Icons.broken_image),
+                                ),
+                              ),
                       ),
                       Positioned(
                         right: 4,
                         top: 4,
                         child: GestureDetector(
                           onTap: () async {
+                            final fileId = (img['fileId'] ?? '').toString();
+                            // If this image exists on server, request deletion
+                            if (fileId.isNotEmpty) {
+                              try {
+                                final resp = await http.delete(
+                                  Uri.parse(
+                                    '$_backendBaseUrl/api/v1/images/file/$fileId',
+                                  ),
+                                );
+                                // Proceed to remove locally regardless of response
+                              } catch (_) {}
+                            }
                             setState(() => _images.removeAt(i));
                             await _updateAnswer();
                           },
