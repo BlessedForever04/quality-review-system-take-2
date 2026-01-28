@@ -24,9 +24,26 @@ class StageService {
     );
     print('📍 API Call: GET $uri');
     final json = await http.getJson(uri);
-    print('📦 Response: $json');
+    print(
+      '📦 Full Response: ${json.toString().substring(0, json.toString().length > 500 ? 500 : json.toString().length)}...',
+    );
     final data = (json['data'] as List?) ?? [];
     print('✓ Stages parsed: ${data.length} items');
+
+    // Debug: Print loopback_count and conflict_count for each stage
+    for (var i = 0; i < data.length; i++) {
+      final stage = data[i];
+      final stageKey = stage['stage_key'];
+      final loopbackCount = stage['loopback_count'];
+      final conflictCount = stage['conflict_count'];
+      print(
+        '  📍 Stage $i ($stageKey): loopback_count=$loopbackCount (${loopbackCount.runtimeType}), conflict_count=$conflictCount (${conflictCount.runtimeType})',
+      );
+
+      // Check if fields exist in the map
+      print('    🔍 Keys in stage: ${stage.keys.toList()}');
+    }
+
     return data.cast<Map<String, dynamic>>();
   }
 
