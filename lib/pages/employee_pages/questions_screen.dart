@@ -1421,7 +1421,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                           getCategoryInfo: _getCategoryInfo,
                           availableCategories: _getAvailableCategories(),
                           onCategoryAssigned: _assignDefectCategory,
-                          isCurrentUserReviewer: canEditReviewer,
+                          isCurrentUserReviewer:
+                              false, // Never show revert button in executor column
                           onExpand: (idx) => setState(
                             () => executorExpanded.contains(idx)
                                 ? executorExpanded.remove(idx)
@@ -1483,7 +1484,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                           getCategoryInfo: _getCategoryInfo,
                           availableCategories: _getAvailableCategories(),
                           onCategoryAssigned: _assignDefectCategory,
-                          isCurrentUserReviewer: canEditReviewer,
+                          isCurrentUserReviewer:
+                              canEditReviewer &&
+                              !canEditExecutor, // Only reviewers who are NOT executors
                           onExpand: (idx) => setState(
                             () => reviewerExpanded.contains(idx)
                                 ? reviewerExpanded.remove(idx)
