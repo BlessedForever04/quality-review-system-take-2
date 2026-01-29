@@ -3,8 +3,6 @@ import 'package:get/get.dart';
 import '../../controllers/projects_controller.dart';
 import '../../models/team_member.dart';
 import '../../models/project.dart';
-import 'admin_project_details_page.dart';
-import '../../services/project_membership_service.dart';
 
 class EmployeeProjectsPage extends StatefulWidget {
   final TeamMember member;
@@ -126,8 +124,6 @@ class _EmployeeProjectsPageState extends State<EmployeeProjectsPage> {
                             child: _ProjectListSection(
                               title: 'Current Projects',
                               projects: _current,
-                              memberId: widget.member.id,
-                              onAssignmentsChanged: _loadProjects,
                             ),
                           ),
                           const SizedBox(width: 24),
@@ -135,8 +131,6 @@ class _EmployeeProjectsPageState extends State<EmployeeProjectsPage> {
                             child: _ProjectListSection(
                               title: 'Completed Projects',
                               projects: _completed,
-                              memberId: widget.member.id,
-                              onAssignmentsChanged: _loadProjects,
                             ),
                           ),
                         ],
@@ -147,15 +141,11 @@ class _EmployeeProjectsPageState extends State<EmployeeProjectsPage> {
                           _ProjectListSection(
                             title: 'Current Projects',
                             projects: _current,
-                            memberId: widget.member.id,
-                            onAssignmentsChanged: _loadProjects,
                           ),
                           const SizedBox(height: 24),
                           _ProjectListSection(
                             title: 'Completed Projects',
                             projects: _completed,
-                            memberId: widget.member.id,
-                            onAssignmentsChanged: _loadProjects,
                           ),
                         ],
                       );
@@ -188,14 +178,7 @@ class _EmployeeProjectsPageState extends State<EmployeeProjectsPage> {
 class _ProjectListSection extends StatelessWidget {
   final String title;
   final List<Project> projects;
-  final String memberId;
-  final Future<void> Function()? onAssignmentsChanged;
-  const _ProjectListSection({
-    required this.title,
-    required this.projects,
-    required this.memberId,
-    this.onAssignmentsChanged,
-  });
+  const _ProjectListSection({required this.title, required this.projects});
 
   @override
   Widget build(BuildContext context) {
@@ -232,14 +215,7 @@ class _ProjectListSection extends StatelessWidget {
               const Text('None')
             else
               Column(
-                children: [
-                  for (final p in projects)
-                    _ProjectTile(
-                      project: p,
-                      memberId: memberId,
-                      onAssignmentsChanged: onAssignmentsChanged,
-                    ),
-                ],
+                children: [for (final p in projects) _ProjectTile(project: p)],
               ),
           ],
         ),
@@ -250,87 +226,38 @@ class _ProjectListSection extends StatelessWidget {
 
 class _ProjectTile extends StatelessWidget {
   final Project project;
-  final String memberId;
-  final Future<void> Function()? onAssignmentsChanged;
-  const _ProjectTile({
-    required this.project,
-    required this.memberId,
-    this.onAssignmentsChanged,
-  });
+  const _ProjectTile({required this.project});
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () {
-        // Navigate to admin project details page
-        Get.to(() => AdminProjectDetailsPage(project: project));
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.black12),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    project.title,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    project.status,
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  project.title,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  project.status,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
             ),
-            // Unassign/delete button
-            IconButton(
-              icon: const Icon(Icons.person_remove),
-              tooltip: 'Remove employee from this project',
-              onPressed: () async {
-                try {
-                  if (!Get.isRegistered<ProjectMembershipService>()) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Membership service not available'),
-                      ),
-                    );
-                    return;
-                  }
-                  final svc = Get.find<ProjectMembershipService>();
-                  await svc.removeMember(
-                    projectId: project.id,
-                    userId: memberId,
-                  );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Removed employee from "${project.title}"'),
-                    ),
-                  );
-                  if (onAssignmentsChanged != null) {
-                    await onAssignmentsChanged!();
-                  }
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to remove: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              },
-            ),
-            Icon(Icons.chevron_right, color: Colors.grey.shade600),
-          ],
-        ),
+          ),
+          Icon(Icons.chevron_right, color: Colors.grey.shade600),
+        ],
       ),
     );
   }

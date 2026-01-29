@@ -11,8 +11,15 @@ import '../../controllers/team_controller.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../services/excel_import_service.dart';
 
-class AdminDashboardPage extends StatelessWidget {
+class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});
+
+  @override
+  State<AdminDashboardPage> createState() => _AdminDashboardPageState();
+}
+
+class _AdminDashboardPageState extends State<AdminDashboardPage> {
+  int? _hoverIndex;
 
   List<Project> _visibleProjects(
     List<Project> source,
@@ -462,7 +469,7 @@ class AdminDashboardPage extends StatelessWidget {
                             ),
                           ),
                           Expanded(
-                            flex: 1,
+                            flex: 2,
                             child: _HeaderCell(
                               label: 'Priority',
                               active: sortKey == 'priority',
@@ -471,7 +478,7 @@ class AdminDashboardPage extends StatelessWidget {
                             ),
                           ),
                           Expanded(
-                            flex: 1,
+                            flex: 2,
                             child: _HeaderCell(
                               label: 'Status',
                               active: sortKey == 'status',
@@ -492,10 +499,10 @@ class AdminDashboardPage extends StatelessWidget {
                       itemBuilder: (context, index) {
                         final proj = projects[index];
                         // Executor value removed per requirement
-                        final hovered = ui.hoverIndex.value == index;
+                        final hovered = _hoverIndex == index;
                         return MouseRegion(
-                          onEnter: (_) => ui.setHover(index),
-                          onExit: (_) => ui.clearHover(),
+                          onEnter: (_) => setState(() => _hoverIndex = index),
+                          onExit: (_) => setState(() => _hoverIndex = null),
                           child: GestureDetector(
                             onTap: () => Get.to(
                               () => AdminProjectDetailsPage(
@@ -557,12 +564,18 @@ class AdminDashboardPage extends StatelessWidget {
                                     ),
                                   ),
                                   Expanded(
-                                    flex: 1,
-                                    child: priorityChip(proj.priority),
+                                    flex: 2,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: priorityChip(proj.priority),
+                                    ),
                                   ),
                                   Expanded(
-                                    flex: 1,
-                                    child: Text((proj.status).toString()),
+                                    flex: 2,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text((proj.status).toString()),
+                                    ),
                                   ),
                                   // Executor cell removed
                                   // Edit/Delete removed from dashboard; now only in details page.

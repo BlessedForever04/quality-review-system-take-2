@@ -167,7 +167,8 @@ class _AdminDashboardPageState extends State<EmployeeDashboard> {
                 child: TextField(
                   controller: _searchCtrl,
                   decoration: const InputDecoration(
-                    hintText: 'Search by title, status, priority, executor...',
+                    hintText:
+                        'Search by title, status, priority, created by...',
                     prefixIcon: Icon(Icons.search),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(
@@ -268,7 +269,7 @@ class _AdminDashboardPageState extends State<EmployeeDashboard> {
                             ),
                           ),
                           Expanded(
-                            flex: 1,
+                            flex: 2,
                             child: _HeaderCell(
                               label: 'Priority',
                               active: _sortKey == 'priority',
@@ -277,7 +278,7 @@ class _AdminDashboardPageState extends State<EmployeeDashboard> {
                             ),
                           ),
                           Expanded(
-                            flex: 1,
+                            flex: 2,
                             child: _HeaderCell(
                               label: 'Status',
                               active: _sortKey == 'status',
@@ -288,7 +289,7 @@ class _AdminDashboardPageState extends State<EmployeeDashboard> {
                           Expanded(
                             flex: 2,
                             child: _HeaderCell(
-                              label: 'Executor',
+                              label: 'Created By',
                               active: _sortKey == 'executor',
                               ascending: _ascending,
                               onTap: () => _toggleSort('executor'),
@@ -377,14 +378,26 @@ class _AdminDashboardPageState extends State<EmployeeDashboard> {
                                     ),
                                   ),
                                   Expanded(
-                                    flex: 1,
-                                    child: _priorityChip(proj.priority),
+                                    flex: 2,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: _priorityChip(proj.priority),
+                                    ),
                                   ),
                                   Expanded(
-                                    flex: 1,
-                                    child: Text((proj.status).toString()),
+                                    flex: 2,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text((proj.status).toString()),
+                                    ),
                                   ),
-                                  Expanded(flex: 2, child: Text(executor)),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(executor),
+                                    ),
+                                  ),
                                   // Edit/Delete removed from dashboard; now only in details page.
                                 ],
                               ),

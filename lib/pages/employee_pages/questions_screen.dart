@@ -6,9 +6,23 @@ import 'package:quality_review/pages/employee_pages/checklist_controller.dart';
 import 'package:quality_review/services/approval_service.dart';
 import 'package:quality_review/services/phase_checklist_service.dart';
 import 'package:quality_review/services/template_service.dart';
+import 'package:flutter/material.dart';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:get/get.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+// import 'package:url_launcher/url_launcher.dart';
+import 'checklist_controller.dart';
+import '../../controllers/auth_controller.dart';
+import '../../services/approval_service.dart';
 import '../../services/stage_service.dart';
+import '../../services/phase_checklist_service.dart';
 import '../../services/project_checklist_service.dart';
+import '../../services/template_service.dart';
+import '../../services/defect_categorization_service.dart';
 
 class QuestionsScreen extends StatefulWidget {
   final String projectId;
@@ -71,7 +85,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   // Counters and metrics
   // Store loopback counter per phase (key: phase number, value: loopback count)
   final Map<int, int> _loopbackCounters = {};
-  int _conflictCounter = 0;
+  // Store conflict counter per phase (key: phase number, value: conflict count)
+  final Map<int, int> _conflictCounters = {};
   int _revertCount = 0;
   int _defectsTotal = 0;
   int _totalCheckpoints = 0;
@@ -89,29 +104,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
     _approvalService = Get.find<ApprovalService>();
     // Initial load
     _loadChecklistData();
-  }
-
-  // Ensure each answer has a well-formed images array: List of maps with fileId
-  Map<String, Map<String, dynamic>> _sanitizeAnswersMap(
-    Map<String, Map<String, dynamic>> source,
-  ) {
-    final result = <String, Map<String, dynamic>>{};
-    source.forEach((key, val) {
-      final v = Map<String, dynamic>.from(val);
-      final imgs = v['images'];
-      if (imgs is List) {
-        v['images'] = imgs
-            .where((e) => e is Map)
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .where((m) => (m['fileId'] ?? '').toString().isNotEmpty)
-            .toList();
-      } else {
-        // Normalize non-list or null images to an empty list
-        v['images'] = <Map<String, dynamic>>[];
-      }
-      result[key] = v;
-    });
-    return result;
   }
 
   List<Map<String, dynamic>> _getAvailableCategories() {
@@ -155,6 +147,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
     }
   }
 
+  /// Handle reviewer reverting the phase back to executor
+  /// This allows the executor to re-fill the checklist if the reviewer is not satisfied
+  /// The cycle continues until the reviewer is satisfied and approves
   Future<void> _handleReviewerRevert() async {
     // Check if current user is a reviewer
     String? currentUserName;
@@ -177,7 +172,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         title: const Text('Revert to Executor'),
         content: const Text(
           'Are you sure you want to send this phase back to the executor? '
-          'The executor will need to review and resubmit their work.',
+          'The executor will need to review and resubmit their work. '
+          'This cycle can continue until you are satisfied with the results.',
         ),
         actions: [
           TextButton(
@@ -201,16 +197,22 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
     try {
       await _approvalService.revertToExecutor(widget.projectId, _selectedPhase);
 
+      // Clear cache to ensure fresh data is loaded
+      checklistCtrl.clearProjectCache(widget.projectId);
+
+      // Reload checklist data to reflect the revert
+      await _loadChecklistData();
+
       if (mounted) {
+        // Force UI rebuild to show updated submission status
+        setState(() {});
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Phase reverted to executor successfully'),
             backgroundColor: Colors.orange,
           ),
         );
-
-        // Reload checklist data to reflect the revert
-        await _loadChecklistData();
       }
     } catch (e) {
       if (mounted) {
@@ -266,15 +268,19 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       final stages = await stageService.listStages(widget.projectId);
 
       // Build stage map and discover maximum actual phase number
-      // Also load loopback counters for all phases
+      // Also load loopback counters and conflict counters for all phases
       int discoveredMaxActual = 1;
       final stageMap = <String, dynamic>{};
       final loopbackCountersMap = <int, int>{};
+      final conflictCountersMap = <int, int>{};
 
       for (final s in stages) {
         final name = (s['stage_name'] ?? '').toString();
         final stageKey = (s['stage_key'] ?? '').toString();
         stageMap[stageKey] = {'name': name, ...s};
+
+        print('\n🔍 Processing stage: $stageKey');
+        print('   Full stage data: $s');
 
         // Extract phase number from stage_key (e.g., "stage1" => 1, "stage2" => 2)
         // This is reliable because stage_key is always in format "stageN"
@@ -286,12 +292,30 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
           final p = int.tryParse(match.group(1) ?? '') ?? 0;
           if (p > discoveredMaxActual) discoveredMaxActual = p;
 
-          // Load loopback counter for this phase
-          final loopbackCount = s['loopback_count'] as int? ?? 0;
-          final conflictCount = s['conflict_count'] as int? ?? 0;
+          // Load loopback counter for this phase - handle both int and double
+          final loopbackValue = s['loopback_count'];
+          print(
+            '   🔢 Phase $p - loopbackValue from stage: $loopbackValue (type: ${loopbackValue.runtimeType})',
+          );
+          final loopbackCount = loopbackValue is int
+              ? loopbackValue
+              : (loopbackValue is double ? loopbackValue.toInt() : 0);
           loopbackCountersMap[p] = loopbackCount;
           debugPrint(
-            '✓ Phase $p counters loaded: loopback=$loopbackCount, conflict=$conflictCount from stage data',
+            '✓ Phase $p: Loaded loopback counter = $loopbackCount (from: $loopbackValue, type: ${loopbackValue.runtimeType})',
+          );
+
+          // Load conflict counter for this phase - handle both int and double
+          final conflictValue = s['conflict_count'];
+          print(
+            '   🔢 Phase $p - conflictValue from stage: $conflictValue (type: ${conflictValue.runtimeType})',
+          );
+          final conflictCount = conflictValue is int
+              ? conflictValue
+              : (conflictValue is double ? conflictValue.toInt() : 0);
+          conflictCountersMap[p] = conflictCount;
+          debugPrint(
+            '✓ Phase $p: Loaded conflict counter = $conflictCount (from: $conflictValue, type: ${conflictValue.runtimeType})',
           );
         }
       }
@@ -300,8 +324,14 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         _stages = stages;
         _stageMap = stageMap;
         _maxActualPhase = discoveredMaxActual;
-        // Update loopback counters for all phases
+        // Clear and update loopback counters for all phases
+        _loopbackCounters.clear();
         _loopbackCounters.addAll(loopbackCountersMap);
+        // Clear and update conflict counters for all phases
+        _conflictCounters.clear();
+        _conflictCounters.addAll(conflictCountersMap);
+        debugPrint('✓ Loopback counters updated: $_loopbackCounters');
+        debugPrint('✓ Conflict counters updated: $_conflictCounters');
       });
 
       if (stages.isEmpty) {
@@ -338,23 +368,17 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       final stageId = (stage['_id'] ?? '').toString();
       _currentStageId = stageId;
 
-      // Load conflict counter from current stage data
-      // conflict_count: Reviewer reverts to executor only
-      try {
-        final conflictCount = stage['conflict_count'] as int? ?? 0;
-        debugPrint('✓ Conflict count loaded for phase $phase: $conflictCount');
-        setState(() {
-          _conflictCounter = conflictCount;
-        });
-      } catch (e) {
-        debugPrint('⚠️ Error loading conflict count: $e');
-        setState(() {
-          _conflictCounter = 0;
-        });
-      }
+      // Debug: Log the complete stage object to verify fields
+      debugPrint('📦 Current stage object: $stage');
+      debugPrint(
+        '📊 Stage fields - loopback_count: ${stage['loopback_count']}, conflict_count: ${stage['conflict_count']}',
+      );
 
-      // Ensure loopback counter exists for this phase (already loaded above)
+      // Ensure counters exist for this phase (already loaded above in the loop)
       if (!_loopbackCounters.containsKey(phase)) {
+        debugPrint(
+          '⚠️ Loopback counter not found for phase $phase, initializing to 0',
+        );
         setState(() {
           _loopbackCounters[phase] = 0;
         });
@@ -362,6 +386,11 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         debugPrint(
           '✓ Loopback count for phase $phase: ${_loopbackCounters[phase]}',
         );
+      }
+      if (!_conflictCounters.containsKey(phase)) {
+        setState(() {
+          _conflictCounters[phase] = 0;
+        });
       }
 
       // Step 3: Try to fetch from new ProjectChecklist API first
@@ -584,9 +613,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       if (!mounted) return;
       setState(() {
         executorAnswers.clear();
-        executorAnswers.addAll(_sanitizeAnswersMap(executorSheet));
+        executorAnswers.addAll(executorSheet);
         reviewerAnswers.clear();
-        reviewerAnswers.addAll(_sanitizeAnswersMap(reviewerSheet));
+        reviewerAnswers.addAll(reviewerSheet);
         if (persistedReviewerSummary != null) {
           _reviewerSubmissionSummaries[_selectedPhase] =
               persistedReviewerSummary;
@@ -871,8 +900,13 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
 
     // Editing only allowed on active phase; older phases view-only for all
     // If project is completed, all phases are view-only
+    // Special case: if phase is reverted, it becomes editable again
+    final approvalStatus = _approvalStatus?['status'] as String?;
+    final isReverted =
+        approvalStatus == 'reverted' ||
+        approvalStatus == 'reverted_to_executor';
     final phaseEditable =
-        _selectedPhase == _activePhase && !_isProjectCompleted;
+        (_selectedPhase == _activePhase || isReverted) && !_isProjectCompleted;
 
     // Check if executor checklist for this phase has been submitted
     final executorSubmitted =
@@ -893,10 +927,15 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         true;
 
     // Can edit only if phase is editable AND checklist has not been submitted
+    // Special case: when reverted to executor, only executor can edit (reviewer stays submitted)
     final canEditExecutorPhase =
         canEditExecutor && phaseEditable && !executorSubmitted;
     final canEditReviewerPhase =
-        canEditReviewer && phaseEditable && !reviewerSubmitted;
+        canEditReviewer &&
+        phaseEditable &&
+        !reviewerSubmitted &&
+        approvalStatus !=
+            'reverted_to_executor'; // Reviewer cannot edit when reverted to executor
 
     // Check if current phase is already approved (no more actions allowed)
     final phaseAlreadyApproved = _approvalStatus?['status'] == 'approved';
@@ -1274,18 +1313,28 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         horizontal: 8.0,
                         vertical: 8.0,
                       ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Conflict Count on the left
-                          ConflictCountBar(conflictCount: _conflictCounter),
-                          const Spacer(),
-                          // Loopback Counter on the right - show counter for current phase
-                          LoopbackCounterBar(
-                            loopbackCount:
-                                _loopbackCounters[_selectedPhase] ?? 0,
-                          ),
-                        ],
+                      child: Builder(
+                        builder: (context) {
+                          final currentLoopback =
+                              _loopbackCounters[_selectedPhase] ?? 0;
+                          final currentConflict =
+                              _conflictCounters[_selectedPhase] ?? 0;
+                          debugPrint(
+                            '🎯 Displaying counters - Phase: $_selectedPhase, Loopback: $currentLoopback, Conflict: $currentConflict',
+                          );
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Conflict Count on the left
+                              ConflictCountBar(conflictCount: currentConflict),
+                              const Spacer(),
+                              // Loopback Counter on the right - show counter for current phase
+                              LoopbackCounterBar(
+                                loopbackCount: currentLoopback,
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                   // Show reviewer submission summary for SDH
@@ -1296,9 +1345,16 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         horizontal: 8.0,
                         vertical: 8.0,
                       ),
-                      child: ReviewerSubmissionSummaryCard(
-                        summary: _reviewerSubmissionSummaries[_selectedPhase]!,
-                        availableCategories: _getAvailableCategories(),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ReviewerSubmissionSummaryCard(
+                              summary:
+                                  _reviewerSubmissionSummaries[_selectedPhase]!,
+                              availableCategories: _getAvailableCategories(),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   // Debug: Show if SDH but no summary
@@ -1420,6 +1476,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                           getCategoryInfo: _getCategoryInfo,
                           availableCategories: _getAvailableCategories(),
                           onCategoryAssigned: _assignDefectCategory,
+                          isCurrentUserReviewer:
+                              false, // Never show revert button in executor column
                           onExpand: (idx) => setState(
                             () => executorExpanded.contains(idx)
                                 ? executorExpanded.remove(idx)
@@ -1436,6 +1494,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                             );
                             _recomputeDefects();
                           },
+                          onRevert:
+                              null, // Executor should never see the revert button
                           onSubmit: () async {
                             if (!canEditExecutorPhase) return;
                             // Accumulate current defects before submission
@@ -1479,6 +1539,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                           getCategoryInfo: _getCategoryInfo,
                           availableCategories: _getAvailableCategories(),
                           onCategoryAssigned: _assignDefectCategory,
+                          isCurrentUserReviewer:
+                              canEditReviewer &&
+                              !canEditExecutor, // Only reviewers who are NOT executors
                           onExpand: (idx) => setState(
                             () => reviewerExpanded.contains(idx)
                                 ? reviewerExpanded.remove(idx)
@@ -1495,13 +1558,11 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                             );
                             _recomputeDefects();
                           },
-                          onRevert:
-                              _handleReviewerRevert, // Only reviewer can revert to executor
+                          // Only show revert button to actual reviewers
+                          onRevert: canEditReviewer
+                              ? _handleReviewerRevert
+                              : null,
                           onSubmit: () async {
-                            if (!canEditReviewerPhase) return;
-                            // Accumulate current defects before submission
-                            _accumulateDefects();
-
                             // Show defect summary dialog
                             final summaryData =
                                 await _showReviewerSubmissionDialog(context);

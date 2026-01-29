@@ -24,27 +24,35 @@ class StageService {
     );
     print('📍 API Call: GET $uri');
     final json = await http.getJson(uri);
-    print(
-      '📦 Full Response: ${json.toString().substring(0, json.toString().length > 500 ? 500 : json.toString().length)}...',
-    );
+    print('📦 Full Response: $json');
+
     final data = (json['data'] as List?) ?? [];
     print('✓ Stages parsed: ${data.length} items');
 
-    // Debug: Print loopback_count and conflict_count for each stage
-    for (var i = 0; i < data.length; i++) {
-      final stage = data[i];
-      final stageKey = stage['stage_key'];
-      final loopbackCount = stage['loopback_count'];
-      final conflictCount = stage['conflict_count'];
+    // Convert to proper Map and ensure counter fields exist
+    final stages = data.map((item) {
+      final stage = Map<String, dynamic>.from(item as Map);
+
+      print('\n🔍 RAW STAGE DATA for ${stage['stage_key']}:');
+      print('   - Raw loopback_count: ${stage['loopback_count']}');
+      print('   - Raw conflict_count: ${stage['conflict_count']}');
+
+      // Ensure counters exist with default 0
+      stage['loopback_count'] = stage['loopback_count'] ?? 0;
+      stage['conflict_count'] = stage['conflict_count'] ?? 0;
+
+      print('  📊 Stage: ${stage['stage_name']} (${stage['stage_key']})');
       print(
-        '  📍 Stage $i ($stageKey): loopback_count=$loopbackCount (${loopbackCount.runtimeType}), conflict_count=$conflictCount (${conflictCount.runtimeType})',
+        '     - loopback_count: ${stage['loopback_count']} (type: ${stage['loopback_count'].runtimeType})',
+      );
+      print(
+        '     - conflict_count: ${stage['conflict_count']} (type: ${stage['conflict_count'].runtimeType})',
       );
 
-      // Check if fields exist in the map
-      print('    🔍 Keys in stage: ${stage.keys.toList()}');
-    }
+      return stage;
+    }).toList();
 
-    return data.cast<Map<String, dynamic>>();
+    return stages;
   }
 
   Future<Map<String, dynamic>> createStage(

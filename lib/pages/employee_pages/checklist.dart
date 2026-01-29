@@ -1079,7 +1079,7 @@ class ApprovalBanner extends StatelessWidget {
     if (status == 'approved') bg = Colors.green.shade100;
     if (status == 'reverted') bg = Colors.red.shade100;
     if (status == 'reverted_to_executor') {
-      bg = const Color.fromARGB(255, 255, 241, 220);
+      bg = Colors.orange.shade100;
       text = 'Reverted to Executor - Waiting for executor to resubmit';
     }
 
@@ -1138,17 +1138,11 @@ class _SubmitBar extends StatelessWidget {
 
     // Check if executor has submitted (for reviewer to enable revert)
     final executorSubmitted = executorSubmissionInfo?['is_submitted'] == true;
-
-    // Show revert button when:
-    // 1. Role is reviewer
-    // 2. Current logged-in user is actually a reviewer (not an executor viewing the reviewer section)
-    // 3. Reviewer hasn't submitted yet (can still make changes)
-    // 4. Executor has submitted (there's work to review)
-    // 5. onRevert callback is provided
-    // This allows reviewer to send work back to executor for corrections
+    // Reviewer can revert to executor when executor submitted but reviewer hasn't
     final showRevertButton =
         role == 'reviewer' &&
         isCurrentUserReviewer &&
+        !submitted &&
         executorSubmitted &&
         onRevert != null;
 
@@ -1169,26 +1163,29 @@ class _SubmitBar extends StatelessWidget {
               ],
             )
           else
-            ElevatedButton.icon(
-              onPressed: canEdit ? onSubmit : null,
-              icon: const Icon(Icons.send),
-              label: Text(
-                'Submit ${role[0].toUpperCase()}${role.substring(1)} Checklist',
-              ),
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: canEdit ? onSubmit : null,
+                  icon: const Icon(Icons.send),
+                  label: Text(
+                    'Submit ${role[0].toUpperCase()}${role.substring(1)} Checklist',
+                  ),
+                ),
+                if (showRevertButton) ...[
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: onRevert,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: const Icon(Icons.undo),
+                    label: const Text('Revert to Executor'),
+                  ),
+                ],
+              ],
             ),
-          // Show revert button independently (for reviewer, even after submission)
-          if (showRevertButton) ...[
-            const SizedBox(width: 12),
-            ElevatedButton.icon(
-              onPressed: onRevert,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-              ),
-              icon: const Icon(Icons.undo),
-              label: const Text('Revert to Executor'),
-            ),
-          ],
           const Spacer(),
           Text(role.toUpperCase(), style: TextStyle(color: Colors.grey[700])),
         ],
@@ -1400,7 +1397,6 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
               label: const Text('Clear answer'),
             ),
           ),
-        const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
@@ -1411,9 +1407,7 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                   filled: true,
                   fillColor: Colors.grey.shade100,
                   hintText: "Remark",
-                  border: const OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey),
-                  ),
+                  border: const OutlineInputBorder(borderSide: BorderSide.none),
                 ),
                 enabled: widget.editable,
                 maxLines: null,
@@ -1425,7 +1419,6 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
             ),
           ],
         ),
-        const SizedBox(height: 10),
         if (_images.isNotEmpty)
           SizedBox(
             height: 100,
@@ -1446,12 +1439,8 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                     : '';
                 if (bytes == null && fileId.isEmpty)
                   return const SizedBox.shrink();
-                return Container(
-                  margin: EdgeInsets.all(5),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.blueGrey.shade100),
-                    borderRadius: BorderRadius.circular(5),
-                  ),
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
                   child: Stack(
                     children: [
                       GestureDetector(
@@ -1462,7 +1451,6 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(6),
-
                           child: bytes != null
                               ? Image.memory(
                                   bytes,
