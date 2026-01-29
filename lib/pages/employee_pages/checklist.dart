@@ -1079,7 +1079,7 @@ class ApprovalBanner extends StatelessWidget {
     if (status == 'approved') bg = Colors.green.shade100;
     if (status == 'reverted') bg = Colors.red.shade100;
     if (status == 'reverted_to_executor') {
-      bg = Colors.orange.shade100;
+      bg = const Color.fromARGB(255, 255, 241, 220);
       text = 'Reverted to Executor - Waiting for executor to resubmit';
     }
 
@@ -1397,6 +1397,7 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
               label: const Text('Clear answer'),
             ),
           ),
+        const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
@@ -1407,7 +1408,9 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                   filled: true,
                   fillColor: Colors.grey.shade100,
                   hintText: "Remark",
-                  border: const OutlineInputBorder(borderSide: BorderSide.none),
+                  border: const OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey),
+                  ),
                 ),
                 enabled: widget.editable,
                 maxLines: null,
@@ -1419,6 +1422,7 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
             ),
           ],
         ),
+        const SizedBox(height: 10),
         if (_images.isNotEmpty)
           SizedBox(
             height: 100,
@@ -1439,8 +1443,12 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                     : '';
                 if (bytes == null && fileId.isEmpty)
                   return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
+                return Container(
+                  margin: EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.blueGrey.shade100),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
                   child: Stack(
                     children: [
                       GestureDetector(
@@ -1451,6 +1459,7 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(6),
+
                           child: bytes != null
                               ? Image.memory(
                                   bytes,
