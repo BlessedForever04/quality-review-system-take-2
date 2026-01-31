@@ -71,7 +71,7 @@ class _AdminProjectDetailsPageState extends State<AdminProjectDetailsPage> {
         final svc = Get.find<ProjectMembershipService>();
         final memberships = await svc.getProjectMembers(widget.project.id);
         final leaders = memberships
-            .where((m) => (m.roleName?.toLowerCase() ?? '') == 'sdh')
+            .where((m) => (m.roleName?.toLowerCase() ?? '') == 'teamleader')
             .toList();
         final execs = memberships
             .where((m) => (m.roleName?.toLowerCase() ?? '') == 'executor')
@@ -534,7 +534,11 @@ class _AssignedTeamGrid extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          child: _RoleCard(title: 'SDH', color: Colors.blue, members: leaders),
+          child: _RoleCard(
+            title: 'TeamLeader',
+            color: Colors.blue,
+            members: leaders,
+          ),
         ),
         const SizedBox(width: 16),
         Expanded(
@@ -723,23 +727,23 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
         .toList();
   }
 
-  /// Show warning when trying to select more than 1 SDH
-  Future<void> _showSDHLimitWarning() async {
+  /// Show warning when trying to select more than 1 TeamLeader
+  Future<void> _showTeamLeaderLimitWarning() async {
     return showAdminDialog(
       context,
-      title: 'SDH Selection Limit',
+      title: 'TeamLeader Selection Limit',
       width: 480,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Only one SDH (Senior Decision Handler) can be assigned per project.',
+            'Only one TeamLeader can be assigned per project.',
             style: TextStyle(fontSize: 14),
           ),
           const SizedBox(height: 12),
           const Text(
-            'Please deselect the current SDH before selecting a different one.',
+            'Please deselect the current TeamLeader before selecting a different one.',
             style: TextStyle(fontSize: 14, color: Colors.grey),
           ),
           const SizedBox(height: 24),
@@ -766,7 +770,7 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
       final roles = await roleService.getAll();
       // Find existing roles by name (case-insensitive)
       Role? leaderRole = roles.firstWhereOrNull(
-        (r) => r.roleName.toLowerCase() == 'sdh',
+        (r) => r.roleName.toLowerCase() == 'teamleader',
       );
       leaderRole ??= roles.firstWhereOrNull(
         (r) => r.roleName.toLowerCase() == 'team leader',
@@ -779,10 +783,10 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
       final String? reviewerRoleId = roles
           .firstWhereOrNull((r) => r.roleName.toLowerCase() == 'reviewer')
           ?.id;
-      // Create SDH role if missing
+      // Create TeamLeader role if missing
       if (leaderRoleId == null) {
         final created = await roleService.create(
-          Role(id: 'new', roleName: 'SDH'),
+          Role(id: 'new', roleName: 'TeamLeader'),
         );
         leaderRoleId = created.id;
       }
@@ -820,7 +824,11 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
         }
       }
 
-      await apply(leaderRoleId, 'sdh', widget.details.teamLeaderIds.toSet());
+      await apply(
+        leaderRoleId,
+        'teamleader',
+        widget.details.teamLeaderIds.toSet(),
+      );
       await apply(
         executorRoleId,
         'executor',
@@ -862,7 +870,7 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
     required TextEditingController ctrl,
     required Set<String> selected,
     required Function(String, bool) toggle,
-    bool isSDH = false,
+    bool isTeamLeader = false,
     Set<String> excludeIds = const {},
   }) {
     final filtered = _filter(ctrl.text, exclude: excludeIds);
@@ -900,9 +908,11 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
                         return CheckboxListTile(
                           value: checked,
                           onChanged: (v) async {
-                            // For SDH role, validate that only 1 is selected
-                            if (isSDH && v == true && selected.length >= 1) {
-                              await _showSDHLimitWarning();
+                            // For TeamLeader role, validate that only 1 is selected
+                            if (isTeamLeader &&
+                                v == true &&
+                                selected.length >= 1) {
+                              await _showTeamLeaderLimitWarning();
                               return;
                             }
                             setState(() => toggle(m.id, v == true));
@@ -946,11 +956,11 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _section(
-            title: 'Assign SDH',
+            title: 'Assign TeamLeader',
             ctrl: _searchLeader,
             selected: d.teamLeaderIds,
             toggle: d.toggleTeamLeader,
-            isSDH: true,
+            isTeamLeader: true,
             excludeIds: {...d.executorIds, ...d.reviewerIds},
           ),
           const _DashedDivider(),
@@ -982,11 +992,11 @@ class _RoleAssignmentSectionsState extends State<_RoleAssignmentSections> {
           children: [
             Expanded(
               child: _section(
-                title: 'Assign SDH',
+                title: 'Assign TeamLeader',
                 ctrl: _searchLeader,
                 selected: d.teamLeaderIds,
                 toggle: d.toggleTeamLeader,
-                isSDH: true,
+                isTeamLeader: true,
                 excludeIds: {...d.executorIds, ...d.reviewerIds},
               ),
             ),

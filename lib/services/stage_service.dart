@@ -82,7 +82,7 @@ class StageService {
     return response['data'] as Map<String, dynamic>? ?? response;
   }
 
-  /// Increment loopback counter for a stage (when SDH reverts phase)
+  /// Increment loopback counter for a stage (when TeamLeader reverts phase)
   Future<Map<String, dynamic>> incrementLoopbackCounter(String stageId) async {
     _ensureToken();
     final uri = Uri.parse(

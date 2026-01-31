@@ -86,7 +86,7 @@ class ProjectDetailsController extends GetxController {
         final roleName = (m.roleName ?? '').toString().trim().toLowerCase();
         final userId = (m.userId).toString();
         if (userId.isEmpty) continue;
-        if (roleName == 'team leader' || roleName == 'sdh') {
+        if (roleName == 'teamleader') {
           teamLeaderIds.add(userId);
         } else if (roleName == 'executor') {
           executorIds.add(userId);
@@ -111,9 +111,9 @@ class ProjectDetailsController extends GetxController {
       if (executorIds.contains(id) || reviewerIds.contains(id)) {
         throw Exception('Employee is already assigned as Executor or Reviewer');
       }
-      // If trying to add more than 1 SDH, reject it
+      // If trying to add more than 1 TeamLeader, reject it
       if (teamLeaderIds.length >= 1) {
-        throw Exception('Only one SDH can be assigned to a project');
+        throw Exception('Only one TeamLeader can be assigned to a project');
       }
       teamLeaderIds.add(id);
     } else {
@@ -122,17 +122,19 @@ class ProjectDetailsController extends GetxController {
     _rebuildUnion();
   }
 
-  /// Check if SDH limit would be exceeded
+  /// Check if TeamLeader limit would be exceeded
   bool canAddTeamLeader() => teamLeaderIds.length < 1;
 
-  /// Get the count of selected SDHs
+  /// Get the count of selected TeamLeaders
   int getTeamLeaderCount() => teamLeaderIds.length;
 
   void toggleExecutor(String id, bool value) {
     if (value) {
       // Check if employee is already assigned to another role
       if (teamLeaderIds.contains(id) || reviewerIds.contains(id)) {
-        throw Exception('Employee is already assigned as SDH or Reviewer');
+        throw Exception(
+          'Employee is already assigned as TeamLeader or Reviewer',
+        );
       }
       executorIds.add(id);
     } else {
@@ -145,7 +147,9 @@ class ProjectDetailsController extends GetxController {
     if (value) {
       // Check if employee is already assigned to another role
       if (teamLeaderIds.contains(id) || executorIds.contains(id)) {
-        throw Exception('Employee is already assigned as SDH or Executor');
+        throw Exception(
+          'Employee is already assigned as TeamLeader or Executor',
+        );
       }
       reviewerIds.add(id);
     } else {

@@ -28,8 +28,8 @@ class ChecklistController extends GetxService {
     // Initialize service
     try {
       final http = Get.find<SimpleHttp>();
-  _answerService = ChecklistAnswerService(http);
-  _approvalService = Get.find<ApprovalService>();
+      _answerService = ChecklistAnswerService(http);
+      _approvalService = Get.find<ApprovalService>();
       print('✓ ChecklistController initialized successfully');
     } catch (e) {
       print('❌ Error initializing ChecklistController: $e');
@@ -52,9 +52,11 @@ class ChecklistController extends GetxService {
     print('📥 Loading answers for $role in project $projectId phase $phase...');
 
     try {
-  // Direct load from checklist-answer API
-  final answers = await _answerService.getAnswers(projectId, phase, role);
-  print('✓ Received ${answers.length} answers from checklist-answer API for $role');
+      // Direct load from checklist-answer API
+      final answers = await _answerService.getAnswers(projectId, phase, role);
+      print(
+        '✓ Received ${answers.length} answers from checklist-answer API for $role',
+      );
 
       // Store in cache
       final proj = _cache.putIfAbsent(projectId, () => {});
@@ -122,9 +124,16 @@ class ChecklistController extends GetxService {
   /// Save all answers for a role to backend
   Future<bool> _saveToBackend(String projectId, int phase, String role) async {
     try {
-  final answers = getRoleSheet(projectId, phase, role);
-  print('💾 Saving ${answers.length} answers for $role via checklist-answer API...');
-      final ok = await _answerService.saveAnswers(projectId, phase, role, answers);
+      final answers = getRoleSheet(projectId, phase, role);
+      print(
+        '💾 Saving ${answers.length} answers for $role via checklist-answer API...',
+      );
+      final ok = await _answerService.saveAnswers(
+        projectId,
+        phase,
+        role,
+        answers,
+      );
       if (ok) {
         print('✓ Saved checklist answers for $role');
         // Editing clears submission status; update cache so UI enables resubmit
@@ -150,8 +159,12 @@ class ChecklistController extends GetxService {
       // First ensure all answers are saved
       await _saveToBackend(projectId, phase, role);
 
-  // Submit via checklist-answer API
-  final success = await _answerService.submitChecklist(projectId, phase, role);
+      // Submit via checklist-answer API
+      final success = await _answerService.submitChecklist(
+        projectId,
+        phase,
+        role,
+      );
 
       if (success) {
         // Update submission cache
@@ -165,8 +178,8 @@ class ChecklistController extends GetxService {
         _submissionCache.refresh();
         print('✓ Submitted checklist for $role');
 
-  // If both roles are submitted and answers match, auto request SDH approval
-  await _maybeRequestApproval(projectId, phase);
+        // If both roles are submitted and answers match, auto request TeamLeader approval
+        await _maybeRequestApproval(projectId, phase);
       }
 
       return success;
@@ -180,8 +193,16 @@ class ChecklistController extends GetxService {
   Future<void> _maybeRequestApproval(String projectId, int phase) async {
     try {
       // Ensure we have fresh submission status for both roles
-      final execStatus = await _answerService.getSubmissionStatus(projectId, phase, 'executor');
-      final revStatus = await _answerService.getSubmissionStatus(projectId, phase, 'reviewer');
+      final execStatus = await _answerService.getSubmissionStatus(
+        projectId,
+        phase,
+        'executor',
+      );
+      final revStatus = await _answerService.getSubmissionStatus(
+        projectId,
+        phase,
+        'reviewer',
+      );
 
       final execSubmitted = execStatus['is_submitted'] == true;
       final revSubmitted = revStatus['is_submitted'] == true;
@@ -237,15 +258,15 @@ class ChecklistController extends GetxService {
     String role,
   ) async {
     try {
-      final status = await _answerService.getSubmissionStatus(projectId, phase, role);
+      final status = await _answerService.getSubmissionStatus(
+        projectId,
+        phase,
+        role,
+      );
       return status;
     } catch (e) {
       print('Error deriving submission status: $e');
-      return {
-        'is_submitted': false,
-        'submitted_at': null,
-        'answer_count': 0,
-      };
+      return {'is_submitted': false, 'submitted_at': null, 'answer_count': 0};
     }
   }
 

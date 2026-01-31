@@ -837,14 +837,15 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       // active represents the next phase that's now active
       // active = 1 means phase 1 is active, active = 2 means phase 2 is active, etc.
       _activePhase = active;
-      // Only clamp selected phase for non-SDH users
-      // SDH can view any phase including pending ones
+      // Only clamp selected phase for non-TeamLeader users
+      // TeamLeader can view any phase including pending ones
       final currentUserName = Get.isRegistered<AuthController>()
           ? Get.find<AuthController>().currentUser.value?.name
           : null;
-      final isSDH = currentUserName != null && authRoleIsSDH(currentUserName);
-      if (!isSDH) {
-        // Non-SDH users: clamp to active phase
+      final isTeamLeader =
+          currentUserName != null && authRoleIsTeamLeader(currentUserName);
+      if (!isTeamLeader) {
+        // Non-TeamLeader users: clamp to active phase
         if (_selectedPhase > _activePhase) _selectedPhase = _activePhase;
       }
       // Always ensure phase is at least 1
@@ -876,9 +877,10 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       final auth = Get.find<AuthController>();
       currentUserName = auth.currentUser.value?.name;
     }
-    // SDH role: show approve/revert controls
-    final isSDH =
-        currentUserName != null && (authRoleIsSDH(currentUserName) == true);
+    // TeamLeader role: show approve/revert controls
+    final isTeamLeader =
+        currentUserName != null &&
+        (authRoleIsTeamLeader(currentUserName) == true);
     final canEditExecutor =
         currentUserName != null &&
         widget.executors
@@ -943,7 +945,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
           // Spacer to push all content to the right side
           const Spacer(),
           // Approve and Revert buttons in the middle
-          if (isSDH) ...[
+          if (isTeamLeader) ...[
             ElevatedButton.icon(
               onPressed: (reviewerSubmitted && !phaseAlreadyApproved)
                   ? () async {
@@ -1110,7 +1112,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
 
                     return DropdownMenuItem(
                       value: p,
-                      enabled: isSDH ? true : (p <= _activePhase),
+                      enabled: isTeamLeader ? true : (p <= _activePhase),
                       child: Row(
                         children: [
                           // Show actual stage name from template
@@ -1161,7 +1163,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                                 style: TextStyle(fontSize: 10),
                               ),
                             )
-                          else if (p > _activePhase && isSDH)
+                          else if (p > _activePhase && isTeamLeader)
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 6,
@@ -1182,9 +1184,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                   }).toList(),
               onChanged: (val) async {
                 if (val == null) return;
-                // SDH can navigate to any phase for review
+                // TeamLeader can navigate to any phase for review
                 // Others can only go up to active phase
-                if (!isSDH && val > _activePhase) {
+                if (!isTeamLeader && val > _activePhase) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text(
@@ -1299,7 +1301,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         ),
                       ),
                     ),
-                  if (isSDH)
+                  if (isTeamLeader)
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8.0,
@@ -1329,8 +1331,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         },
                       ),
                     ),
-                  // Show reviewer submission summary for SDH
-                  if (isSDH &&
+                  // Show reviewer submission summary for TeamLeader
+                  if (isTeamLeader &&
                       _reviewerSubmissionSummaries[_selectedPhase] != null)
                     Padding(
                       padding: const EdgeInsets.symmetric(
@@ -1349,8 +1351,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         ],
                       ),
                     ),
-                  // Debug: Show if SDH but no summary
-                  if (isSDH &&
+                  // Debug: Show if TeamLeader but no summary
+                  if (isTeamLeader &&
                       _reviewerSubmissionSummaries[_selectedPhase] == null)
                     Padding(
                       padding: const EdgeInsets.all(8.0),
@@ -1460,7 +1462,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                           selectedDefectSeverity: _selectedDefectSeverity,
                           defectsByChecklist: _defectsByChecklist,
                           checkpointsByChecklist: _checkpointsByChecklist,
-                          showDefects: isSDH,
+                          showDefects: isTeamLeader,
                           expanded: executorExpanded,
                           scrollController: _executorScroll,
                           highlightSubs: _highlightSubs,
@@ -1568,7 +1570,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                           selectedDefectSeverity: _selectedDefectSeverity,
                           defectsByChecklist: _defectsByChecklist,
                           checkpointsByChecklist: _checkpointsByChecklist,
-                          showDefects: isSDH,
+                          showDefects: isTeamLeader,
                           expanded: reviewerExpanded,
                           scrollController: _reviewerScroll,
                           highlightSubs: _highlightSubs,
@@ -1650,7 +1652,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                                 await _showReviewerSubmissionDialog(context);
                             if (summaryData == null) return; // User cancelled
 
-                            // Persist reviewer summary as a meta-answer so SDH can view later
+                            // Persist reviewer summary as a meta-answer so TeamLeader can view later
                             // First update the local cache
                             setState(() {
                               _reviewerSubmissionSummaries[_selectedPhase] =
@@ -1713,9 +1715,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
     );
   }
 
-  bool authRoleIsSDH(String userName) {
+  bool authRoleIsTeamLeader(String userName) {
     final u = userName.trim().toLowerCase();
-    if (u.contains('sdh')) return true;
+    if (u.contains('teamleader')) return true;
     return widget.leaders.map((e) => e.trim().toLowerCase()).contains(u);
   }
 

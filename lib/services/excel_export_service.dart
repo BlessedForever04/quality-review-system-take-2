@@ -179,7 +179,9 @@ class ExcelExportService {
     print('✅ Using reviewers: $reviewers');
 
     final projectLeader = memberships
-        .firstWhereOrNull((m) => (m.roleName?.toLowerCase() ?? '') == 'sdh')
+        .firstWhereOrNull(
+          (m) => (m.roleName?.toLowerCase() ?? '') == 'teamleader',
+        )
         ?.userName;
 
     // Add all fields in vertical format

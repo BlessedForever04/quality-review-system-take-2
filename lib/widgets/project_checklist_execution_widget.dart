@@ -1,5 +1,5 @@
 /// Hierarchical checklist execution widget for ProjectChecklist structure.
-/// This widget handles role-based editing (Executor, Reviewer, SDH) and renders
+/// This widget handles role-based editing (Executor, Reviewer, TeamLeader) and renders
 /// the hierarchical structure: Group → Sections (optional) → Questions.
 ///
 /// This is distinct from the template editor (checklist.dart) and is used
@@ -17,7 +17,7 @@ class ProjectChecklistExecutionWidget extends StatefulWidget {
   final String stageName;
   final List<String> executors;
   final List<String> reviewers;
-  final List<String> leaders; // SDH users
+  final List<String> leaders; // TeamLeader users
   final bool readOnly; // If true, all controls disabled
 
   const ProjectChecklistExecutionWidget({
@@ -47,7 +47,7 @@ class _ProjectChecklistExecutionWidgetState
   // Role permissions for current user
   late final bool _canEditExecutor;
   late final bool _canEditReviewer;
-  late final bool _isSDH;
+  late final bool _isTeamLeader;
 
   @override
   void initState() {
@@ -76,7 +76,7 @@ class _ProjectChecklistExecutionWidgetState
             .map((e) => e.trim().toLowerCase())
             .contains(currentUserName.trim().toLowerCase());
 
-    _isSDH =
+    _isTeamLeader =
         currentUserName != null &&
         widget.leaders
             .map((e) => e.trim().toLowerCase())
@@ -328,7 +328,7 @@ class _ProjectChecklistExecutionWidgetState
                             ),
                         canEditExecutor: !widget.readOnly && _canEditExecutor,
                         canEditReviewer: !widget.readOnly && _canEditReviewer,
-                        isSDH: _isSDH,
+                        isTeamLeader: _isTeamLeader,
                       );
                     }).toList(),
 
@@ -353,7 +353,7 @@ class _ProjectChecklistExecutionWidgetState
                             ),
                         canEditExecutor: !widget.readOnly && _canEditExecutor,
                         canEditReviewer: !widget.readOnly && _canEditReviewer,
-                        isSDH: _isSDH,
+                        isTeamLeader: _isTeamLeader,
                       );
                     }).toList(),
                   ],
@@ -375,7 +375,7 @@ class _QuestionTile extends StatefulWidget {
   final Function(String?, String?) onReviewerUpdate;
   final bool canEditExecutor;
   final bool canEditReviewer;
-  final bool isSDH;
+  final bool isTeamLeader;
 
   const _QuestionTile({
     required this.question,
@@ -384,7 +384,7 @@ class _QuestionTile extends StatefulWidget {
     required this.onReviewerUpdate,
     required this.canEditExecutor,
     required this.canEditReviewer,
-    required this.isSDH,
+    required this.isTeamLeader,
   });
 
   @override
@@ -733,7 +733,7 @@ class _SectionTile extends StatelessWidget {
   final Function(String, String?, String?) onReviewerUpdate;
   final bool canEditExecutor;
   final bool canEditReviewer;
-  final bool isSDH;
+  final bool isTeamLeader;
 
   const _SectionTile({
     required this.section,
@@ -742,7 +742,7 @@ class _SectionTile extends StatelessWidget {
     required this.onReviewerUpdate,
     required this.canEditExecutor,
     required this.canEditReviewer,
-    required this.isSDH,
+    required this.isTeamLeader,
   });
 
   @override
@@ -832,7 +832,7 @@ class _SectionTile extends StatelessWidget {
                             onReviewerUpdate(question.id, status, remark),
                         canEditExecutor: canEditExecutor,
                         canEditReviewer: canEditReviewer,
-                        isSDH: isSDH,
+                        isTeamLeader: isTeamLeader,
                       ),
                     ),
                   )
