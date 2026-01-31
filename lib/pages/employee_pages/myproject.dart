@@ -4,6 +4,7 @@ import '../../models/project.dart';
 import '../../controllers/projects_controller.dart';
 import '../../controllers/auth_controller.dart';
 import 'my_project_detail_page.dart';
+import '../../widgets/phase_overview_widget.dart';
 
 class Myproject extends StatefulWidget {
   const Myproject({super.key});
@@ -451,10 +452,7 @@ class _MyprojectState extends State<Myproject> {
                                           margin: const EdgeInsets.only(
                                             bottom: 6,
                                           ),
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 10,
-                                            horizontal: 16,
-                                          ),
+                                          padding: const EdgeInsets.all(16),
                                           decoration: BoxDecoration(
                                             color: hovered
                                                 ? _getHoverColor(project.status)
@@ -481,65 +479,80 @@ class _MyprojectState extends State<Myproject> {
                                                   ]
                                                 : null,
                                           ),
-                                          child: Row(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              Expanded(
-                                                flex: 2,
-                                                child: Text(
-                                                  (project.projectNo
-                                                              ?.trim()
-                                                              .isNotEmpty ??
-                                                          false)
-                                                      ? project.projectNo!
-                                                            .trim()
-                                                      : '--',
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              Expanded(
-                                                flex: 3,
-                                                child: Text(
-                                                  project.title,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              Expanded(
-                                                flex: 2,
-                                                child: Text(
-                                                  '${project.started.year}-${project.started.month.toString().padLeft(2, '0')}-${project.started.day.toString().padLeft(2, '0')}',
-                                                ),
-                                              ),
-                                              Expanded(
-                                                flex: 2,
-                                                child: Align(
-                                                  alignment:
-                                                      Alignment.centerLeft,
-                                                  child: _priorityChip(
-                                                    project.priority,
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Text(
+                                                      (project.projectNo
+                                                                  ?.trim()
+                                                                  .isNotEmpty ??
+                                                              false)
+                                                          ? project.projectNo!
+                                                                .trim()
+                                                          : '--',
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
                                                   ),
-                                                ),
-                                              ),
-                                              Expanded(
-                                                flex: 2,
-                                                child: Align(
-                                                  alignment:
-                                                      Alignment.centerLeft,
-                                                  child: Text(project.status),
-                                                ),
-                                              ),
-                                              Expanded(
-                                                flex: 2,
-                                                child: Align(
-                                                  alignment:
-                                                      Alignment.centerLeft,
-                                                  child: Text(
-                                                    project.executor ?? '--',
+                                                  Expanded(
+                                                    flex: 3,
+                                                    child: Text(
+                                                      project.title,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
                                                   ),
-                                                ),
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Text(
+                                                      '${project.started.year}-${project.started.month.toString().padLeft(2, '0')}-${project.started.day.toString().padLeft(2, '0')}',
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Align(
+                                                      alignment:
+                                                          Alignment.centerLeft,
+                                                      child: _priorityChip(
+                                                        project.priority,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Align(
+                                                      alignment:
+                                                          Alignment.centerLeft,
+                                                      child: Text(
+                                                        project.status,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Align(
+                                                      alignment:
+                                                          Alignment.centerLeft,
+                                                      child: Text(
+                                                        project.executor ??
+                                                            '--',
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 12),
+                                              PhaseOverviewWidget(
+                                                project: project,
+                                                compact: true,
+                                                showTitle: false,
                                               ),
                                             ],
                                           ),

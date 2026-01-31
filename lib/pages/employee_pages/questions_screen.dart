@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
-import 'dart:typed_data';
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:http/http.dart' as http;
 import 'package:quality_review/controllers/auth_controller.dart';
 import 'package:quality_review/pages/employee_pages/checklist.dart';
 import 'package:quality_review/pages/employee_pages/checklist_controller.dart';
@@ -14,7 +10,6 @@ import 'package:quality_review/services/phase_checklist_service.dart';
 import 'package:quality_review/services/template_service.dart';
 import 'package:quality_review/services/stage_service.dart';
 import 'package:quality_review/services/project_checklist_service.dart';
-import 'package:quality_review/services/defect_categorization_service.dart';
 
 class QuestionsScreen extends StatefulWidget {
   final String projectId;
@@ -56,7 +51,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   int _activePhase = 1; // Active phase index (enabled for editing)
   int _maxActualPhase = 7; // Max phase number discovered from stages
   bool _isProjectCompleted = false; // Track if all phases are completed
-  List<Map<String, dynamic>> _stages = []; // Store stages with names
   Map<String, dynamic> _stageMap = {}; // Map stageKey to stage data
   Map<String, dynamic>? _approvalStatus;
   Map<String, dynamic>? _compareStatus;
@@ -79,9 +73,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   final Map<int, int> _loopbackCounters = {};
   // Store conflict counter per phase (key: phase number, value: conflict count)
   final Map<int, int> _conflictCounters = {};
-  int _revertCount = 0;
-  int _defectsTotal = 0;
-  int _totalCheckpoints = 0;
   int _maxDefectsSeenInSession = 0;
   int _totalCheckpointsInSession = 0;
 
@@ -313,7 +304,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       }
 
       setState(() {
-        _stages = stages;
         _stageMap = stageMap;
         _maxActualPhase = discoveredMaxActual;
         // Clear and update loopback counters for all phases
@@ -549,15 +539,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
 
       // Step 5b: Fetch revert count for this phase from DB
       try {
-        final revertCountFromDb = await _approvalService.getRevertCount(
-          widget.projectId,
-          phase,
-        );
-        if (mounted) {
-          setState(() {
-            _revertCount = revertCountFromDb;
-          });
-        }
+        await _approvalService.getRevertCount(widget.projectId, phase);
       } catch (e) {}
 
       final executorSheet = checklistCtrl.getRoleSheet(
@@ -575,28 +557,26 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       final metaSummary = reviewerSheet[_reviewerSummaryKey];
       if (metaSummary != null) {
         // Extract the actual summary data from the meta answer structure
-        if (metaSummary is Map<String, dynamic>) {
-          // First check if there's a metadata field (from backend)
-          if (metaSummary.containsKey('metadata') &&
-              metaSummary['metadata'] is Map<String, dynamic>) {
-            final metadata = metaSummary['metadata'] as Map<String, dynamic>;
-            if (metadata.containsKey('_summaryData') &&
-                metadata['_summaryData'] is Map<String, dynamic>) {
-              persistedReviewerSummary = Map<String, dynamic>.from(
-                metadata['_summaryData'] as Map<String, dynamic>,
-              );
-            }
-          }
-          // Fallback: check direct _summaryData field (old structure)
-          else if (metaSummary.containsKey('_summaryData') &&
-              metaSummary['_summaryData'] is Map<String, dynamic>) {
+        // First check if there's a metadata field (from backend)
+        if (metaSummary.containsKey('metadata') &&
+            metaSummary['metadata'] is Map<String, dynamic>) {
+          final metadata = metaSummary['metadata'] as Map<String, dynamic>;
+          if (metadata.containsKey('_summaryData') &&
+              metadata['_summaryData'] is Map<String, dynamic>) {
             persistedReviewerSummary = Map<String, dynamic>.from(
-              metaSummary['_summaryData'] as Map<String, dynamic>,
+              metadata['_summaryData'] as Map<String, dynamic>,
             );
-          } else {
-            // Last fallback: try to use the whole object
-            persistedReviewerSummary = Map<String, dynamic>.from(metaSummary);
           }
+        }
+        // Fallback: check direct _summaryData field (old structure)
+        else if (metaSummary.containsKey('_summaryData') &&
+            metaSummary['_summaryData'] is Map<String, dynamic>) {
+          persistedReviewerSummary = Map<String, dynamic>.from(
+            metaSummary['_summaryData'] as Map<String, dynamic>,
+          );
+        } else {
+          // Last fallback: try to use the whole object
+          persistedReviewerSummary = Map<String, dynamic>.from(metaSummary);
         }
       }
       // Remove meta entry so it does not interfere with question rendering
@@ -782,8 +762,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       setState(() {
         _defectsByChecklist = counts;
         _checkpointsByChecklist = checkpointCounts;
-        _defectsTotal = total;
-        _totalCheckpoints = totalCheckpoints;
         // Track the highest defects seen in this session
         // Even if conflicts are fixed later, we remember the max we saw
         if (total > _maxDefectsSeenInSession) {
@@ -931,9 +909,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         approvalStatus !=
             'reverted_to_executor'; // Reviewer cannot edit when reverted to executor
 
-    // Check if current phase is already approved (no more actions allowed)
-    final phaseAlreadyApproved = _approvalStatus?['status'] == 'approved';
-
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -944,151 +919,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         actions: [
           // Spacer to push all content to the right side
           const Spacer(),
-          // Approve and Revert buttons in the middle
-          if (isTeamLeader) ...[
-            ElevatedButton.icon(
-              onPressed: (reviewerSubmitted && !phaseAlreadyApproved)
-                  ? () async {
-                      try {
-                        final approvedPhase = _selectedPhase;
+          // TeamLeader can only view - no approve/revert buttons needed anymore
+          // Reviewer submission now auto-approves the phase
 
-                        await _approvalService.approve(
-                          widget.projectId,
-                          approvedPhase,
-                        );
-
-                        checklistCtrl.clearProjectCache(widget.projectId);
-
-                        // Wait for backend to process
-                        await Future.delayed(const Duration(milliseconds: 300));
-
-                        // Recompute active phase
-                        await _computeActivePhase();
-
-                        // Switch to the newly activated phase if available
-                        if (mounted &&
-                            !_isProjectCompleted &&
-                            _activePhase <= _maxActualPhase) {
-                          setState(() {
-                            _selectedPhase = _activePhase;
-                          });
-                        }
-
-                        if (mounted) {
-                          final message = _isProjectCompleted
-                              ? 'Phase $approvedPhase approved! Project is now completed. All phases are in view-only mode.'
-                              : 'Phase $approvedPhase approved! Phase $_activePhase is now active.';
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(message),
-                              backgroundColor: Colors.green,
-                              duration: const Duration(seconds: 4),
-                            ),
-                          );
-                        }
-
-                        // Reload checklist data for the new active phase
-                        await _loadChecklistData();
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Approve failed: $e')),
-                          );
-                        }
-                      }
-                    }
-                  : () {
-                      if (phaseAlreadyApproved) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Phase already approved!'),
-                            backgroundColor: Colors.blue,
-                          ),
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Waiting for reviewer response...'),
-                            backgroundColor: Colors.orange,
-                          ),
-                        );
-                      }
-                    },
-              icon: const Icon(Icons.check_circle),
-              label: const Text('Approve Phase'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: (reviewerSubmitted && !phaseAlreadyApproved)
-                    ? Colors.green
-                    : Colors.grey,
-                foregroundColor: Colors.white,
-              ),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
-              onPressed: (reviewerSubmitted && !phaseAlreadyApproved)
-                  ? () async {
-                      try {
-                        // Revert the phase - this will increment loopback_count in backend
-                        await _approvalService.revert(
-                          widget.projectId,
-                          _selectedPhase,
-                        );
-
-                        checklistCtrl.clearProjectCache(widget.projectId);
-
-                        // Reload data - loopback counter will be fetched from stage
-                        await _loadChecklistData();
-
-                        // Recompute active phase
-                        await _computeActivePhase();
-
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Phase ${_selectedPhase} reverted. Executor and Reviewer can edit again.',
-                              ),
-                              backgroundColor: Colors.orange,
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Revert failed: $e')),
-                          );
-                        }
-                      }
-                    }
-                  : () {
-                      if (phaseAlreadyApproved) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Phase already approved! Cannot revert.',
-                            ),
-                            backgroundColor: Colors.blue,
-                          ),
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Waiting for reviewer response...'),
-                            backgroundColor: Colors.orange,
-                          ),
-                        );
-                      }
-                    },
-              icon: const Icon(Icons.undo),
-              label: const Text('Revert Phase'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: (reviewerSubmitted && !phaseAlreadyApproved)
-                    ? Colors.orange
-                    : Colors.grey,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
           // Spacer to create gap before right-aligned items
           const Spacer(),
           // Phase selector on the right
@@ -1301,34 +1134,38 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         ),
                       ),
                     ),
+                  // TeamLeader view-only info banner
                   if (isTeamLeader)
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8.0,
                         vertical: 8.0,
                       ),
-                      child: Builder(
-                        builder: (context) {
-                          final currentLoopback =
-                              _loopbackCounters[_selectedPhase] ?? 0;
-                          final currentConflict =
-                              _conflictCounters[_selectedPhase] ?? 0;
-                          debugPrint(
-                            '🎯 Displaying counters - Phase: $_selectedPhase, Loopback: $currentLoopback, Conflict: $currentConflict',
-                          );
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Conflict Count on the left
-                              ConflictCountBar(conflictCount: currentConflict),
-                              const Spacer(),
-                              // Loopback Counter on the right - show counter for current phase
-                              LoopbackCounterBar(
-                                loopbackCount: currentLoopback,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              color: Colors.blue.shade700,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'View-Only Mode: Phases are automatically approved when Reviewer submits. You can view progress but cannot approve or revert.',
+                                style: TextStyle(
+                                  color: Colors.blue.shade900,
+                                  fontSize: 14,
+                                ),
                               ),
-                            ],
-                          );
-                        },
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   // Show reviewer submission summary for TeamLeader
@@ -1548,7 +1385,11 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                               setState(() {});
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Executor checklist submitted'),
+                                  content: Text(
+                                    'Executor checklist submitted. Waiting for Reviewer to submit for phase approval.',
+                                  ),
+                                  backgroundColor: Colors.blue,
+                                  duration: Duration(seconds: 3),
                                 ),
                               );
                               await _computeActivePhase();
@@ -1695,12 +1536,31 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                             );
                             if (success && mounted) {
                               setState(() {});
+
+                              // Wait a moment for auto-approval to process
+                              await Future.delayed(
+                                const Duration(milliseconds: 500),
+                              );
+
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Reviewer checklist submitted'),
+                                SnackBar(
+                                  content: const Text(
+                                    '✅ Review submitted! Phase approved automatically. Next phase is now active.',
+                                  ),
+                                  backgroundColor: Colors.green,
+                                  duration: const Duration(seconds: 4),
                                 ),
                               );
                               await _computeActivePhase();
+
+                              // Auto-switch to next phase if available
+                              if (!_isProjectCompleted &&
+                                  _activePhase <= _maxActualPhase) {
+                                setState(() {
+                                  _selectedPhase = _activePhase;
+                                });
+                                await _loadChecklistData();
+                              }
                             }
                           },
                           editMode: _editMode,

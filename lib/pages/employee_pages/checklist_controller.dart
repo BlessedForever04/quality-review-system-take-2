@@ -189,7 +189,7 @@ class ChecklistController extends GetxService {
     }
   }
 
-  // If executor and reviewer are both submitted and their answers match, request approval
+  // Auto-approve phase when reviewer submits (new workflow: no TeamLeader approval needed)
   Future<void> _maybeRequestApproval(String projectId, int phase) async {
     try {
       // Ensure we have fresh submission status for both roles
@@ -207,18 +207,18 @@ class ChecklistController extends GetxService {
       final execSubmitted = execStatus['is_submitted'] == true;
       final revSubmitted = revStatus['is_submitted'] == true;
       if (!execSubmitted || !revSubmitted) {
-        print('ℹ️ Approval not requested: both roles not submitted yet');
+        print('ℹ️ Auto-approval not triggered: both roles not submitted yet');
         return;
       }
 
-      // Compare answers on backend
-      final cmp = await _approvalService.compare(projectId, phase);
-      if (cmp['match'] == true) {
-        await _approvalService.request(projectId, phase);
-        print('📨 Approval requested for project=$projectId phase=$phase');
-      } else {
-        print('⚠️ Answers do not match; approval not requested');
-      }
+      // When both executor and reviewer have submitted, automatically approve the phase
+      // This unlocks the next phase without requiring TeamLeader approval
+      print('✅ Both roles submitted - auto-approving phase $phase');
+      await _approvalService.approve(projectId, phase);
+      print('📨 Phase $phase auto-approved for project=$projectId');
+
+      // Clear cache to reflect new active phase
+      clearProjectCache(projectId);
     } catch (e) {
       print('Error while requesting approval: $e');
     }

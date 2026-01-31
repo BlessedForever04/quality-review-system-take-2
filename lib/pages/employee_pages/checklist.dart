@@ -9,7 +9,6 @@ import 'dart:convert';
 // import 'package:url_launcher/url_launcher.dart';
 import 'checklist_controller.dart';
 import '../../services/phase_checklist_service.dart';
-import '../../services/defect_categorization_service.dart';
 
 // import '../../config/api_config.dart';
 // Simple backend base URL for uploads; adjust if needed
@@ -1243,7 +1242,6 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
   String? selectedSeverity; // Added: for severity assignment
   final TextEditingController remarkController = TextEditingController();
   List<Map<String, dynamic>> _images = [];
-  Map<String, dynamic>? _categorySuggestion;
   Timer? _debounceTimer;
 
   @override
@@ -1651,32 +1649,9 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
     if (widget.role == 'reviewer') {
       _debounceTimer = Timer(const Duration(milliseconds: 400), () {
         _computeLocalSuggestions(newRemark);
-        _fetchCategorySuggestion(newRemark);
       });
     }
     _updateAnswer();
-  }
-
-  Future<void> _fetchCategorySuggestion(String remark) async {
-    if (remark.trim().length < 2) {
-      setState(() {
-        _categorySuggestion = null;
-      });
-      return;
-    }
-    setState(() {});
-    try {
-      final svc = Get.find<DefectCategorizationService>();
-      final checkpointId = widget.checkpointId ?? 'dummy';
-      final suggestion = await svc.suggestCategory(checkpointId, remark.trim());
-      setState(() {
-        _categorySuggestion = suggestion;
-      });
-    } catch (e) {
-      setState(() {
-        _categorySuggestion = null;
-      });
-    }
   }
 
   void _computeLocalSuggestions(String remark) {
