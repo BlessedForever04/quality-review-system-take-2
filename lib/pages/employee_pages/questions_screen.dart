@@ -85,6 +85,11 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
     // Initialize controllers/services
     checklistCtrl = Get.find<ChecklistController>();
     _approvalService = Get.find<ApprovalService>();
+
+    // Clear cache to ensure fresh data when opening this screen
+    // This prevents stale submission status from previous session
+    checklistCtrl.clearProjectCache(widget.projectId);
+
     // Initial load
     _loadChecklistData();
   }
@@ -542,6 +547,12 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         await _approvalService.getRevertCount(widget.projectId, phase);
       } catch (e) {}
 
+      // Force refresh submission status to ensure it's up to date
+      // This is critical for proper UI state when logging back in
+      debugPrint('🔄 Force refreshing submission status for phase $phase');
+      await checklistCtrl.loadAnswers(widget.projectId, phase, 'executor');
+      await checklistCtrl.loadAnswers(widget.projectId, phase, 'reviewer');
+
       final executorSheet = checklistCtrl.getRoleSheet(
         widget.projectId,
         phase,
@@ -881,22 +892,32 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         (_selectedPhase == _activePhase || isReverted) && !_isProjectCompleted;
 
     // Check if executor checklist for this phase has been submitted
-    final executorSubmitted =
-        checklistCtrl.submissionInfo(
-          widget.projectId,
-          _selectedPhase,
-          'executor',
-        )?['is_submitted'] ==
-        true;
+    final executorSubmissionInfo = checklistCtrl.submissionInfo(
+      widget.projectId,
+      _selectedPhase,
+      'executor',
+    );
+    final executorSubmitted = executorSubmissionInfo?['is_submitted'] == true;
 
     // Check if reviewer checklist for this phase has been submitted
-    final reviewerSubmitted =
-        checklistCtrl.submissionInfo(
-          widget.projectId,
-          _selectedPhase,
-          'reviewer',
-        )?['is_submitted'] ==
-        true;
+    final reviewerSubmissionInfo = checklistCtrl.submissionInfo(
+      widget.projectId,
+      _selectedPhase,
+      'reviewer',
+    );
+    final reviewerSubmitted = reviewerSubmissionInfo?['is_submitted'] == true;
+
+    // Debug logging for submission status
+    debugPrint('📊 Phase $_selectedPhase submission status:');
+    debugPrint(
+      '   Executor submitted: $executorSubmitted (info: $executorSubmissionInfo)',
+    );
+    debugPrint(
+      '   Reviewer submitted: $reviewerSubmitted (info: $reviewerSubmissionInfo)',
+    );
+    debugPrint('   Approval status: $approvalStatus');
+    debugPrint('   Is reverted: $isReverted');
+    debugPrint('   Phase editable: $phaseEditable');
 
     // Can edit only if phase is editable AND checklist has not been submitted
     // Special case: when reverted to executor, only executor can edit (reviewer stays submitted)
@@ -908,6 +929,13 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         !reviewerSubmitted &&
         approvalStatus !=
             'reverted_to_executor'; // Reviewer cannot edit when reverted to executor
+
+    debugPrint(
+      '   Can edit executor: $canEditExecutorPhase (canEditExecutor: $canEditExecutor, phaseEditable: $phaseEditable, !executorSubmitted: ${!executorSubmitted})',
+    );
+    debugPrint(
+      '   Can edit reviewer: $canEditReviewerPhase (canEditReviewer: $canEditReviewer, phaseEditable: $phaseEditable, !reviewerSubmitted: ${!reviewerSubmitted})',
+    );
 
     return Scaffold(
       appBar: AppBar(
