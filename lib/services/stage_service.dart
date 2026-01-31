@@ -43,9 +43,6 @@ class StageService {
 
       print('  📊 Stage: ${stage['stage_name']} (${stage['stage_key']})');
       print(
-        '     - loopback_count: ${stage['loopback_count']} (type: ${stage['loopback_count'].runtimeType})',
-      );
-      print(
         '     - conflict_count: ${stage['conflict_count']} (type: ${stage['conflict_count'].runtimeType})',
       );
 
@@ -80,17 +77,5 @@ class StageService {
     final uri = Uri.parse('${ApiConfig.baseUrl}/stages/$stageId');
     final response = await http.getJson(uri);
     return response['data'] as Map<String, dynamic>? ?? response;
-  }
-
-  /// Increment loopback counter for a stage (when TeamLeader reverts phase)
-  Future<Map<String, dynamic>> incrementLoopbackCounter(String stageId) async {
-    _ensureToken();
-    final uri = Uri.parse(
-      '${ApiConfig.baseUrl}/stages/$stageId/increment-loopback',
-    );
-    print('📍 API Call: PATCH $uri');
-    final json = await http.patchJson(uri, {});
-    print('📦 Response: $json');
-    return (json['data'] as Map<String, dynamic>?) ?? {};
   }
 }

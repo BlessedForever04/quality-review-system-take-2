@@ -69,8 +69,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   String _reviewerSummaryKey = '_meta_reviewer_summary';
 
   // Counters and metrics
-  // Store loopback counter per phase (key: phase number, value: loopback count)
-  final Map<int, int> _loopbackCounters = {};
   // Store conflict counter per phase (key: phase number, value: conflict count)
   final Map<int, int> _conflictCounters = {};
   int _maxDefectsSeenInSession = 0;
@@ -256,10 +254,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       final stages = await stageService.listStages(widget.projectId);
 
       // Build stage map and discover maximum actual phase number
-      // Also load loopback counters and conflict counters for all phases
+      // Also load conflict counters for all phases
       int discoveredMaxActual = 1;
       final stageMap = <String, dynamic>{};
-      final loopbackCountersMap = <int, int>{};
       final conflictCountersMap = <int, int>{};
 
       for (final s in stages) {
@@ -280,19 +277,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
           final p = int.tryParse(match.group(1) ?? '') ?? 0;
           if (p > discoveredMaxActual) discoveredMaxActual = p;
 
-          // Load loopback counter for this phase - handle both int and double
-          final loopbackValue = s['loopback_count'];
-          print(
-            '   🔢 Phase $p - loopbackValue from stage: $loopbackValue (type: ${loopbackValue.runtimeType})',
-          );
-          final loopbackCount = loopbackValue is int
-              ? loopbackValue
-              : (loopbackValue is double ? loopbackValue.toInt() : 0);
-          loopbackCountersMap[p] = loopbackCount;
-          debugPrint(
-            '✓ Phase $p: Loaded loopback counter = $loopbackCount (from: $loopbackValue, type: ${loopbackValue.runtimeType})',
-          );
-
           // Load conflict counter for this phase - handle both int and double
           final conflictValue = s['conflict_count'];
           print(
@@ -311,13 +295,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       setState(() {
         _stageMap = stageMap;
         _maxActualPhase = discoveredMaxActual;
-        // Clear and update loopback counters for all phases
-        _loopbackCounters.clear();
-        _loopbackCounters.addAll(loopbackCountersMap);
         // Clear and update conflict counters for all phases
         _conflictCounters.clear();
         _conflictCounters.addAll(conflictCountersMap);
-        debugPrint('✓ Loopback counters updated: $_loopbackCounters');
         debugPrint('✓ Conflict counters updated: $_conflictCounters');
       });
 
@@ -358,22 +338,10 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       // Debug: Log the complete stage object to verify fields
       debugPrint('📦 Current stage object: $stage');
       debugPrint(
-        '📊 Stage fields - loopback_count: ${stage['loopback_count']}, conflict_count: ${stage['conflict_count']}',
+        '📊 Stage fields - conflict_count: ${stage['conflict_count']}',
       );
 
-      // Ensure counters exist for this phase (already loaded above in the loop)
-      if (!_loopbackCounters.containsKey(phase)) {
-        debugPrint(
-          '⚠️ Loopback counter not found for phase $phase, initializing to 0',
-        );
-        setState(() {
-          _loopbackCounters[phase] = 0;
-        });
-      } else {
-        debugPrint(
-          '✓ Loopback count for phase $phase: ${_loopbackCounters[phase]}',
-        );
-      }
+      // Ensure conflict counter exists for this phase
       if (!_conflictCounters.containsKey(phase)) {
         setState(() {
           _conflictCounters[phase] = 0;

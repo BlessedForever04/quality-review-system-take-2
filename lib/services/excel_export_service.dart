@@ -239,12 +239,9 @@ class ExcelExportService {
 
         int rowIndex = 0;
 
-        // Extract loopback_count and conflict_count from stage data
-        final loopbackCount = stageData['loopback_count'] ?? 0;
+        // Extract conflict_count from stage data
         final conflictCount = stageData['conflict_count'] ?? 0;
-        print(
-          '  ℹ️ Phase ${phaseIndex + 1}: loopback_count=$loopbackCount, conflict_count=$conflictCount',
-        );
+        print('  ℹ️ Phase ${phaseIndex + 1}: conflict_count=$conflictCount');
 
         // Get checklists for this phase
         final checklists = await checklistService.listForStage(
@@ -386,7 +383,6 @@ class ExcelExportService {
                   'defectDetected': defectDetected,
                   'defectCategory': defectCategory,
                   'defectSeverity': defectSeverity,
-                  'loopbackCount': loopbackCount,
                   'conflictCount': conflictCount,
                 });
               } catch (e) {
@@ -534,7 +530,6 @@ class ExcelExportService {
           'Defect Detected (Y/N)',
           'Defect Category',
           'Defect Severity',
-          'Loopback Count',
           'Conflict Count',
         ];
 
@@ -584,7 +579,6 @@ class ExcelExportService {
               row['defectDetected'],
               row['defectCategory'],
               row['defectSeverity'],
-              row['loopbackCount'],
               row['conflictCount'],
             ];
 
@@ -623,8 +617,7 @@ class ExcelExportService {
         sheet.setColumnWidth(7, 20); // Defect Detected
         sheet.setColumnWidth(8, 20); // Defect Category
         sheet.setColumnWidth(9, 18); // Defect Severity
-        sheet.setColumnWidth(10, 15); // Loopback Count
-        sheet.setColumnWidth(11, 15); // Conflict Count
+        sheet.setColumnWidth(10, 15); // Conflict Count
 
         print(
           '✓ $sheetName created with $totalCheckpoints checkpoints, $totalDefects defects',

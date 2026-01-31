@@ -876,37 +876,37 @@ class ConflictCountBar extends StatelessWidget {
   }
 }
 
-class LoopbackCounterBar extends StatelessWidget {
-  final int loopbackCount;
-  const LoopbackCounterBar({required this.loopbackCount});
+class ConflictCounterBar extends StatelessWidget {
+  final int conflictCount;
+  const ConflictCounterBar({required this.conflictCount});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.purple.shade50,
+        color: Colors.orange.shade50,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.purple, width: 1.2),
+        border: Border.all(color: Colors.orange, width: 1.2),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.history, size: 22, color: Colors.purple.shade700),
+          Icon(Icons.compare_arrows, size: 22, color: Colors.orange.shade700),
           const SizedBox(width: 10),
           const Text(
-            'Loopback Counter',
+            'Conflict Counter',
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           ),
           const SizedBox(width: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.purple,
+              color: Colors.orange,
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
-              '$loopbackCount',
+              '$conflictCount',
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
