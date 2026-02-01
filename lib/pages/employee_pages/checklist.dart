@@ -334,6 +334,7 @@ class RoleColumn extends StatelessWidget {
     final bgColor = role == 'executor'
         ? Colors.blue.shade100
         : Colors.green.shade100;
+
     return Expanded(
       child: Column(
         children: [
@@ -1248,6 +1249,8 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
   final TextEditingController remarkController = TextEditingController();
   List<Map<String, dynamic>> _images = [];
   Timer? _debounceTimer;
+  List<Map<String, dynamic>> _suggestedCategories =
+      []; // Added: for showing suggestion chips
 
   @override
   void initState() {
@@ -1451,6 +1454,64 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
             // ),
           ],
         ),
+        // Show suggested categories for reviewer role
+        if (widget.role == 'reviewer' && _suggestedCategories.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Suggested Categories:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _suggestedCategories.map((cat) {
+                    final id = (cat['_id'] ?? '').toString();
+                    final name = (cat['name'] ?? '').toString();
+                    final isSelected = selectedCategory == id;
+                    return FilterChip(
+                      label: Text(name, style: const TextStyle(fontSize: 12)),
+                      selected: isSelected,
+                      onSelected: widget.editable
+                          ? (_) {
+                              setState(() {
+                                selectedCategory = id;
+                              });
+                              // Update parent state only, no backend call
+                              if (widget.checkpointId != null &&
+                                  widget.onCategoryAssigned != null) {
+                                widget.onCategoryAssigned!(
+                                  widget.checkpointId!,
+                                  id,
+                                  severity: selectedSeverity,
+                                );
+                              }
+                              // Save will happen through updateCheckpointResponse
+                              _updateAnswer();
+                            }
+                          : null,
+                      backgroundColor: Colors.blue.shade50,
+                      selectedColor: Colors.blue.shade200,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+        ],
         // Add defect category and severity for reviewer role
         if (widget.role == 'reviewer') ...[
           const SizedBox(height: 12),
@@ -1482,6 +1543,7 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                   onChanged: widget.editable
                       ? (val) {
                           setState(() => selectedCategory = val);
+                          // Update parent state only, no backend call
                           if (widget.checkpointId != null &&
                               widget.onCategoryAssigned != null) {
                             widget.onCategoryAssigned!(
@@ -1490,6 +1552,8 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                               severity: selectedSeverity,
                             );
                           }
+                          // Save will happen through updateCheckpointResponse
+                          _updateAnswer();
                         }
                       : null,
                 ),
@@ -1524,6 +1588,7 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                   onChanged: widget.editable
                       ? (val) {
                           setState(() => selectedSeverity = val);
+                          // Update parent state only, no backend call
                           if (widget.checkpointId != null &&
                               widget.onCategoryAssigned != null) {
                             widget.onCategoryAssigned!(
@@ -1532,6 +1597,8 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                               severity: val,
                             );
                           }
+                          // Save will happen through updateCheckpointResponse
+                          _updateAnswer();
                         }
                       : null,
                 ),
@@ -1774,6 +1841,9 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
   void _computeLocalSuggestions(String remark) {
     final text = remark.trim();
     if (text.length < 2 || widget.availableCategories.isEmpty) {
+      setState(() {
+        _suggestedCategories = [];
+      });
       return;
     }
     final normalized = text
@@ -1783,6 +1853,9 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
         .where((t) => t.isNotEmpty)
         .toList();
     if (normalized.isEmpty) {
+      setState(() {
+        _suggestedCategories = [];
+      });
       return;
     }
     final suggestions = <Map<String, dynamic>>[];
@@ -1821,14 +1894,23 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
         }
       }
       if (matchCount > 0) {
-        suggestions.add({'suggestedCategoryId': id, 'categoryName': name});
+        suggestions.add({'_id': id, 'name': name, 'matchScore': matchCount});
       }
     }
-    // Sort by name for consistent ordering
-    suggestions.sort(
-      (a, b) =>
-          (a['categoryName'] as String).compareTo(b['categoryName'] as String),
-    );
-    setState(() {});
+    // Sort by match score descending, then by name
+    suggestions.sort((a, b) {
+      final scoreA = a['matchScore'] as double;
+      final scoreB = b['matchScore'] as double;
+      if (scoreA != scoreB) {
+        return scoreB.compareTo(scoreA); // Higher score first
+      }
+      return (a['name'] as String).compareTo(b['name'] as String);
+    });
+
+    // Update the suggestions list to show as blue chips
+    // Limit to top 5 suggestions
+    setState(() {
+      _suggestedCategories = suggestions.take(5).toList();
+    });
   }
 }

@@ -73,6 +73,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   final Map<int, int> _conflictCounters = {};
   int _maxDefectsSeenInSession = 0;
   int _totalCheckpointsInSession = 0;
+  int _loopbackCount = 0; // Track how many times phase was reverted to executor
 
   // Persisted reviewer submission summary per phase
   final Map<int, Map<String, dynamic>> _reviewerSubmissionSummaries = {};
@@ -106,31 +107,13 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
     String? categoryId, {
     String? severity,
   }) async {
-    try {
-      // Immediately update local state
-      setState(() {
-        _selectedDefectCategory[checkpointId] = categoryId;
-        if (severity != null) {
-          _selectedDefectSeverity[checkpointId] = severity;
-        }
-      });
-
-      // Save to backend
-      if (categoryId != null && categoryId.isNotEmpty) {
-        final checklistService = Get.find<PhaseChecklistService>();
-        await checklistService.assignDefectCategory(
-          checkpointId,
-          categoryId,
-          severity: severity,
-        );
+    // Only update local state - actual save happens through updateCheckpointResponse
+    setState(() {
+      _selectedDefectCategory[checkpointId] = categoryId;
+      if (severity != null) {
+        _selectedDefectSeverity[checkpointId] = severity;
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
-      }
-    }
+    });
   }
 
   /// Handle reviewer reverting the phase back to executor
@@ -485,10 +468,19 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        checklist = [];
-        _errorMessage = e.toString();
-      });
+      // Don't show checkpoint-related errors to users
+      final errorMsg = e.toString();
+      if (!errorMsg.toLowerCase().contains('checkpoint')) {
+        setState(() {
+          checklist = [];
+          _errorMessage = errorMsg;
+        });
+      } else {
+        // Silently ignore checkpoint errors
+        setState(() {
+          checklist = [];
+        });
+      }
     }
 
     // Step 5: Load answers
@@ -822,7 +814,16 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         widget.projectId,
         _selectedPhase,
       );
-      if (mounted) setState(() => _approvalStatus = appr);
+      if (mounted) {
+        setState(() {
+          _approvalStatus = appr;
+          // Extract loopback count from approval status
+          _loopbackCount =
+              (appr?['loopbackCount'] as int?) ??
+              (appr?['revertCount'] as int?) ??
+              0;
+        });
+      }
     } catch (_) {}
   }
 
@@ -921,6 +922,32 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
 
           // Spacer to create gap before right-aligned items
           const Spacer(),
+          // Show loopback counter for team leaders
+          if (isTeamLeader && _loopbackCount > 0)
+            Container(
+              margin: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.purple.shade100,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.purple.shade300, width: 1.5),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.loop, size: 18, color: Colors.purple.shade700),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Loopback: $_loopbackCount',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: Colors.purple.shade900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Phase selector on the right
           DropdownButtonHideUnderline(
             child: DropdownButton<int>(
@@ -1246,6 +1273,85 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         ],
                       ),
                     ),
+                  // Show defect rate banner for reviewers and team leaders
+                  if (canEditReviewer || isTeamLeader)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.red.shade200,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                color: Colors.red.shade700,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'Defect Rate',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Builder(
+                                builder: (context) {
+                                  // Calculate total defects and checkpoints
+                                  int totalDefects = 0;
+                                  int totalCheckpoints = 0;
+                                  _defectsByChecklist.values.forEach(
+                                    (count) => totalDefects += count,
+                                  );
+                                  _checkpointsByChecklist.values.forEach(
+                                    (count) => totalCheckpoints += count,
+                                  );
+                                  final percentage = totalCheckpoints > 0
+                                      ? (totalDefects / totalCheckpoints * 100)
+                                      : 0.0;
+
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      '${percentage.toStringAsFixed(2)}%\n($totalDefects/$totalCheckpoints)',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: Colors.white,
+                                        height: 1.2,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   Expanded(
                     child: Row(
                       children: [
@@ -1323,11 +1429,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                                   categoryId: categoryId,
                                   severity: severity,
                                 );
-                                print(
-                                  '✓ Updated checkpoint $checkpointId with category=$categoryId, severity=$severity',
-                                );
                               } catch (e) {
-                                print('⚠️ Failed to update checkpoint: $e');
+                                // Silently ignore checkpoint update errors
                               }
                             }
 
@@ -1374,7 +1477,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                           selectedDefectSeverity: _selectedDefectSeverity,
                           defectsByChecklist: _defectsByChecklist,
                           checkpointsByChecklist: _checkpointsByChecklist,
-                          showDefects: isTeamLeader,
+                          showDefects: isTeamLeader || canEditReviewer,
                           expanded: reviewerExpanded,
                           scrollController: _reviewerScroll,
                           highlightSubs: _highlightSubs,
@@ -1436,11 +1539,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                                   categoryId: categoryId,
                                   severity: severity,
                                 );
-                                print(
-                                  '✓ Updated checkpoint $checkpointId with category=$categoryId, severity=$severity',
-                                );
                               } catch (e) {
-                                print('⚠️ Failed to update checkpoint: $e');
+                                // Silently ignore checkpoint update errors
                               }
                             }
 
@@ -1451,47 +1551,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                               ? _handleReviewerRevert
                               : null,
                           onSubmit: () async {
-                            // Show defect summary dialog
-                            final summaryData =
-                                await _showReviewerSubmissionDialog(context);
-                            if (summaryData == null) return; // User cancelled
-
-                            // Persist reviewer summary as a meta-answer so TeamLeader can view later
-                            // First update the local cache
-                            setState(() {
-                              _reviewerSubmissionSummaries[_selectedPhase] =
-                                  summaryData;
-                            });
-
-                            // Create a valid answer structure with the summary in the remark field
-                            final metaAnswer = {
-                              'answer': null, // Valid null answer
-                              'remark': summaryData
-                                  .toString(), // Serialized summary
-                              'images': [],
-                              '_isMeta':
-                                  true, // Flag to identify this as metadata
-                              '_summaryData': summaryData, // Original summary
-                            };
-
-                            setState(() {
-                              reviewerAnswers[_reviewerSummaryKey] = metaAnswer;
-                            });
-
-                            // Force immediate save to backend (no debounce)
-                            await checklistCtrl.setAnswer(
-                              widget.projectId,
-                              _selectedPhase,
-                              'reviewer',
-                              _reviewerSummaryKey,
-                              metaAnswer,
-                            );
-
-                            // Wait for debounced save to complete
-                            await Future.delayed(
-                              const Duration(milliseconds: 600),
-                            );
-
+                            // Submit reviewer checklist without showing dialog
                             final success = await checklistCtrl.submitChecklist(
                               widget.projectId,
                               _selectedPhase,
