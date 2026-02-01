@@ -1262,6 +1262,22 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
     _fetchExistingImages();
   }
 
+  @override
+  void didUpdateWidget(SubQuestionCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Sync category and severity from parent when they change
+    if (widget.selectedCategoryId != oldWidget.selectedCategoryId) {
+      setState(() => selectedCategory = widget.selectedCategoryId);
+    }
+    if (widget.selectedSeverity != oldWidget.selectedSeverity) {
+      setState(() => selectedSeverity = widget.selectedSeverity);
+    }
+    // Re-initialize if initialData changed
+    if (widget.initialData != oldWidget.initialData) {
+      _initializeData();
+    }
+  }
+
   void _initializeData() {
     if (widget.initialData != null) {
       selectedOption = widget.initialData!['answer'];
@@ -1435,6 +1451,94 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
             // ),
           ],
         ),
+        // Add defect category and severity for reviewer role
+        if (widget.role == 'reviewer') ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    labelText: 'Defect Category',
+                    border: const OutlineInputBorder(
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('None')),
+                    ...widget.availableCategories.map((cat) {
+                      final id = (cat['_id'] ?? '').toString();
+                      final name = (cat['name'] ?? 'Unknown').toString();
+                      return DropdownMenuItem(value: id, child: Text(name));
+                    }),
+                  ],
+                  onChanged: widget.editable
+                      ? (val) {
+                          setState(() => selectedCategory = val);
+                          if (widget.checkpointId != null &&
+                              widget.onCategoryAssigned != null) {
+                            widget.onCategoryAssigned!(
+                              widget.checkpointId!,
+                              val,
+                              severity: selectedSeverity,
+                            );
+                          }
+                        }
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: selectedSeverity,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    labelText: 'Severity',
+                    border: const OutlineInputBorder(
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('None')),
+                    DropdownMenuItem(
+                      value: 'Critical',
+                      child: Text('Critical'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Non-Critical',
+                      child: Text('Non-Critical'),
+                    ),
+                  ],
+                  onChanged: widget.editable
+                      ? (val) {
+                          setState(() => selectedSeverity = val);
+                          if (widget.checkpointId != null &&
+                              widget.onCategoryAssigned != null) {
+                            widget.onCategoryAssigned!(
+                              widget.checkpointId!,
+                              selectedCategory,
+                              severity: val,
+                            );
+                          }
+                        }
+                      : null,
+                ),
+              ),
+            ],
+          ),
+        ],
         if (_images.isNotEmpty)
           SizedBox(
             height: 100,

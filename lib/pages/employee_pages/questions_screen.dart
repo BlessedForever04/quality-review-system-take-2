@@ -895,6 +895,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         canEditReviewer &&
         phaseEditable &&
         !reviewerSubmitted &&
+        executorSubmitted && // Reviewer can only edit after executor submits
         approvalStatus !=
             'reverted_to_executor'; // Reviewer cannot edit when reverted to executor
 
@@ -902,7 +903,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       '   Can edit executor: $canEditExecutorPhase (canEditExecutor: $canEditExecutor, phaseEditable: $phaseEditable, !executorSubmitted: ${!executorSubmitted})',
     );
     debugPrint(
-      '   Can edit reviewer: $canEditReviewerPhase (canEditReviewer: $canEditReviewer, phaseEditable: $phaseEditable, !reviewerSubmitted: ${!reviewerSubmitted})',
+      '   Can edit reviewer: $canEditReviewerPhase (canEditReviewer: $canEditReviewer, phaseEditable: $phaseEditable, !reviewerSubmitted: ${!reviewerSubmitted}, executorSubmitted: $executorSubmitted)',
     );
 
     return Scaffold(
