@@ -1440,10 +1440,10 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                 maxLines: null,
               ),
             ),
-            // IconButton(
-            //   icon: const Icon(Icons.add_a_photo_outlined),
-            //   onPressed: widget.editable ? _pickImages : null,
-            // ),
+            IconButton(
+              icon: const Icon(Icons.add_a_photo_outlined),
+              onPressed: widget.editable ? _pickImages : null,
+            ),
           ],
         ),
         // Show suggested categories for reviewer role
