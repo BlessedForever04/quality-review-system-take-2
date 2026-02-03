@@ -73,7 +73,8 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   final Map<int, int> _conflictCounters = {};
   int _maxDefectsSeenInSession = 0;
   int _totalCheckpointsInSession = 0;
-  int _loopbackCount = 0; // Track how many times phase was reverted to executor
+  // Track loopback count per phase (key: phase number, value: loopback count)
+  final Map<int, int> _loopbackCounters = {};
 
   // Persisted reviewer submission summary per phase
   final Map<int, Map<String, dynamic>> _reviewerSubmissionSummaries = {};
@@ -282,6 +283,11 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         _conflictCounters.clear();
         _conflictCounters.addAll(conflictCountersMap);
         debugPrint('✓ Conflict counters updated: $_conflictCounters');
+
+        // Loopback counter is the same as conflict counter (tracks reviewer reverts)
+        _loopbackCounters.clear();
+        _loopbackCounters.addAll(conflictCountersMap);
+        debugPrint('✓ Loopback counters updated: $_loopbackCounters');
       });
 
       if (stages.isEmpty) {
@@ -341,6 +347,61 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         final groups = projectChecklistData['groups'] as List<dynamic>? ?? [];
         if (groups.isNotEmpty) {
           loadedChecklist = Question.fromProjectChecklistGroups(groups);
+
+          // Extract defect category and severity from questions
+          for (final group in groups) {
+            if (group is! Map<String, dynamic>) continue;
+
+            // Process direct questions in group
+            final directQuestions = group['questions'] as List<dynamic>? ?? [];
+            for (final q in directQuestions) {
+              if (q is! Map<String, dynamic>) continue;
+              final questionId = (q['_id'] ?? '').toString();
+              if (questionId.isEmpty) continue;
+
+              // Extract defect info from reviewer response
+              final reviewerResp =
+                  q['reviewerResponse'] as Map<String, dynamic>? ?? {};
+              final defectCatId = (reviewerResp['categoryId'] ?? '').toString();
+              final defectSeverity = (reviewerResp['severity'] ?? '')
+                  .toString();
+
+              if (defectCatId.isNotEmpty) {
+                _selectedDefectCategory[questionId] = defectCatId;
+                _selectedDefectSeverity[questionId] = defectSeverity.isNotEmpty
+                    ? defectSeverity
+                    : null;
+              }
+            }
+
+            // Process questions from sections
+            final sections = group['sections'] as List<dynamic>? ?? [];
+            for (final section in sections) {
+              if (section is! Map<String, dynamic>) continue;
+              final sectionQuestions =
+                  section['questions'] as List<dynamic>? ?? [];
+
+              for (final q in sectionQuestions) {
+                if (q is! Map<String, dynamic>) continue;
+                final questionId = (q['_id'] ?? '').toString();
+                if (questionId.isEmpty) continue;
+
+                // Extract defect info from reviewer response
+                final reviewerResp =
+                    q['reviewerResponse'] as Map<String, dynamic>? ?? {};
+                final defectCatId = (reviewerResp['categoryId'] ?? '')
+                    .toString();
+                final defectSeverity = (reviewerResp['severity'] ?? '')
+                    .toString();
+
+                if (defectCatId.isNotEmpty) {
+                  _selectedDefectCategory[questionId] = defectCatId;
+                  _selectedDefectSeverity[questionId] =
+                      defectSeverity.isNotEmpty ? defectSeverity : null;
+                }
+              }
+            }
+          }
         }
       } catch (e) {}
 
@@ -552,6 +613,61 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       }
       // Remove meta entry so it does not interfere with question rendering
       reviewerSheet.remove(_reviewerSummaryKey);
+
+      // Extract category and severity from reviewer answers and populate the maps
+      debugPrint(
+        '🔍 Extracting category/severity from ${checklist.length} checklists...',
+      );
+      for (final question in checklist) {
+        for (final subQuestion in question.subQuestions) {
+          final questionId = (subQuestion['id'] ?? '').toString();
+          final questionText = (subQuestion['text'] ?? '').toString();
+
+          // The key used by RoleColumn is (id ?? text)
+          final key = questionId.isNotEmpty ? questionId : questionText;
+
+          if (key.isEmpty) continue;
+
+          // Try to find the answer by question ID or text
+          var answer = reviewerSheet[questionId];
+          if (answer == null && questionText.isNotEmpty) {
+            answer = reviewerSheet[questionText];
+          }
+          if (answer == null && key.isNotEmpty) {
+            answer = reviewerSheet[key];
+          }
+
+          if (answer != null && answer is Map<String, dynamic>) {
+            final categoryId = (answer['categoryId'] ?? '').toString();
+            final severity = (answer['severity'] ?? '').toString();
+
+            // Store using the same key that RoleColumn uses (id ?? text)
+            if (categoryId.isNotEmpty) {
+              _selectedDefectCategory[key] = categoryId;
+            }
+            if (severity.isNotEmpty) {
+              _selectedDefectSeverity[key] = severity;
+            }
+
+            debugPrint('📥 Loaded category/severity:');
+            debugPrint('   Key: $key');
+            debugPrint('   QuestionId: $questionId');
+            debugPrint('   QuestionText: $questionText');
+            debugPrint('   CategoryId: $categoryId');
+            debugPrint('   Severity: $severity');
+          } else {
+            debugPrint(
+              '⚠️  No answer found for key: $key (id: $questionId, text: $questionText)',
+            );
+          }
+        }
+      }
+      debugPrint(
+        '📊 Total categories loaded: ${_selectedDefectCategory.length}',
+      );
+      debugPrint(
+        '📊 Total severities loaded: ${_selectedDefectSeverity.length}',
+      );
 
       if (!mounted) return;
       setState(() {
@@ -817,11 +933,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       if (mounted) {
         setState(() {
           _approvalStatus = appr;
-          // Extract loopback count from approval status
-          _loopbackCount =
-              (appr?['loopbackCount'] as int?) ??
-              (appr?['revertCount'] as int?) ??
-              0;
         });
       }
     } catch (_) {}
@@ -922,32 +1033,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
 
           // Spacer to create gap before right-aligned items
           const Spacer(),
-          // Show loopback counter for team leaders
-          if (isTeamLeader && _loopbackCount > 0)
-            Container(
-              margin: const EdgeInsets.only(right: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.purple.shade100,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.purple.shade300, width: 1.5),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.loop, size: 18, color: Colors.purple.shade700),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Loopback: $_loopbackCount',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      color: Colors.purple.shade900,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           // Phase selector on the right
           DropdownButtonHideUnderline(
             child: DropdownButton<int>(
@@ -1178,33 +1263,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         ],
                       ),
                     ),
-                  // Debug: Show if TeamLeader but no summary
-                  if (isTeamLeader &&
-                      _reviewerSubmissionSummaries[_selectedPhase] == null)
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              color: Colors.grey.shade600,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'No reviewer submission summary available for Phase $_selectedPhase',
-                              style: TextStyle(color: Colors.grey.shade700),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
                   if (_editMode)
                     Padding(
                       padding: const EdgeInsets.symmetric(
@@ -1273,83 +1331,140 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         ],
                       ),
                     ),
-                  // Show defect rate banner for reviewers and team leaders
+                  // Show defect rate and loopback counter for reviewers and team leaders
                   if (canEditReviewer || isTeamLeader)
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 8,
                       ),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: Colors.red.shade200,
-                              width: 1.5,
+                      child: Row(
+                        children: [
+                          // Defect Rate
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: Colors.red.shade200,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  color: Colors.red.shade700,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 12),
+                                const Text(
+                                  'Defect Rate',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Builder(
+                                  builder: (context) {
+                                    // Calculate total defects and checkpoints
+                                    int totalDefects = 0;
+                                    int totalCheckpoints = 0;
+                                    _defectsByChecklist.values.forEach(
+                                      (count) => totalDefects += count,
+                                    );
+                                    _checkpointsByChecklist.values.forEach(
+                                      (count) => totalCheckpoints += count,
+                                    );
+                                    final percentage = totalCheckpoints > 0
+                                        ? (totalDefects /
+                                              totalCheckpoints *
+                                              100)
+                                        : 0.0;
+
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red,
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        '${percentage.toStringAsFixed(2)}%\n($totalDefects/$totalCheckpoints)',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: Colors.white,
+                                          height: 1.2,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.info_outline,
-                                color: Colors.red.shade700,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 12),
-                              const Text(
-                                'Defect Rate',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                  color: Colors.black87,
+                          const SizedBox(width: 16),
+                          // Loopback Counter (only for team leaders)
+                          if (isTeamLeader)
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.purple.shade50,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: Colors.purple.shade200,
+                                  width: 1.5,
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Builder(
-                                builder: (context) {
-                                  // Calculate total defects and checkpoints
-                                  int totalDefects = 0;
-                                  int totalCheckpoints = 0;
-                                  _defectsByChecklist.values.forEach(
-                                    (count) => totalDefects += count,
-                                  );
-                                  _checkpointsByChecklist.values.forEach(
-                                    (count) => totalCheckpoints += count,
-                                  );
-                                  final percentage = totalCheckpoints > 0
-                                      ? (totalDefects / totalCheckpoints * 100)
-                                      : 0.0;
-
-                                  return Container(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.loop,
+                                    color: Colors.purple.shade700,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  const Text(
+                                    'Loopback Counter',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Container(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 12,
                                       vertical: 6,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.red,
+                                      color: Colors.purple,
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: Text(
-                                      '${percentage.toStringAsFixed(2)}%\n($totalDefects/$totalCheckpoints)',
+                                      '${_loopbackCounters[_selectedPhase] ?? 0}',
                                       textAlign: TextAlign.center,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 13,
                                         color: Colors.white,
-                                        height: 1.2,
                                       ),
                                     ),
-                                  );
-                                },
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
+                        ],
                       ),
                     ),
                   Expanded(
@@ -1496,16 +1611,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                           onAnswer: (subQ, ans) async {
                             setState(() => reviewerAnswers[subQ] = ans);
 
-                            // Save to checklist answers
-                            await checklistCtrl.setAnswer(
-                              widget.projectId,
-                              _selectedPhase,
-                              'reviewer',
-                              subQ,
-                              ans,
-                            );
-
-                            // Also update the checkpoint with category and severity if available
                             // Find checkpoint ID from the checklist Questions structure
                             String? checkpointId;
                             for (final q in checklist) {
@@ -1520,13 +1625,65 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                               }
                             }
 
+                            // Get category and severity from answer if provided, otherwise from maps
+                            String? categoryId = (ans['categoryId'] ?? '')
+                                .toString();
+                            if (categoryId.isEmpty &&
+                                checkpointId != null &&
+                                checkpointId.isNotEmpty) {
+                              categoryId =
+                                  _selectedDefectCategory[checkpointId];
+                            }
+
+                            String? severity = (ans['severity'] ?? '')
+                                .toString();
+                            if (severity.isEmpty &&
+                                checkpointId != null &&
+                                checkpointId.isNotEmpty) {
+                              severity = _selectedDefectSeverity[checkpointId];
+                            }
+
+                            debugPrint('💾 Saving reviewer answer:');
+                            debugPrint('   Question: $subQ');
+                            debugPrint('   CheckpointId: $checkpointId');
+                            debugPrint('   CategoryId: $categoryId');
+                            debugPrint('   Severity: $severity');
+
+                            // Update the maps with the current values
                             if (checkpointId != null &&
                                 checkpointId.isNotEmpty) {
-                              final categoryId =
-                                  _selectedDefectCategory[checkpointId];
-                              final severity =
-                                  _selectedDefectSeverity[checkpointId];
+                              if (categoryId != null && categoryId.isNotEmpty) {
+                                _selectedDefectCategory[checkpointId] =
+                                    categoryId;
+                              }
+                              if (severity != null && severity.isNotEmpty) {
+                                _selectedDefectSeverity[checkpointId] =
+                                    severity;
+                              }
+                            }
 
+                            // Include category and severity in the answer for saving
+                            final answerWithDefectInfo =
+                                Map<String, dynamic>.from(ans);
+                            if (categoryId != null && categoryId.isNotEmpty) {
+                              answerWithDefectInfo['categoryId'] = categoryId;
+                            }
+                            if (severity != null && severity.isNotEmpty) {
+                              answerWithDefectInfo['severity'] = severity;
+                            }
+
+                            // Save to checklist answers with category and severity
+                            await checklistCtrl.setAnswer(
+                              widget.projectId,
+                              _selectedPhase,
+                              'reviewer',
+                              subQ,
+                              answerWithDefectInfo,
+                            );
+
+                            // Also update the checkpoint with category and severity if available
+                            if (checkpointId != null &&
+                                checkpointId.isNotEmpty) {
                               try {
                                 final checklistService =
                                     Get.find<PhaseChecklistService>();
@@ -1540,7 +1697,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                                   severity: severity,
                                 );
                               } catch (e) {
-                                // Silently ignore checkpoint update errors
+                                debugPrint(
+                                  '⚠️ Checkpoint update error (non-critical): $e',
+                                );
                               }
                             }
 

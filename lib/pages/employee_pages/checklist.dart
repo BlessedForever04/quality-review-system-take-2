@@ -1255,11 +1255,27 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
   @override
   void initState() {
     super.initState();
-    _initializeData();
 
-    // Initialize category and severity from parent or initialData
+    if (kDebugMode && widget.role == 'reviewer') {
+      print('\n🔷 SubQuestionCard.initState()');
+      print('   Question: ${widget.subQuestion}');
+      print('   CheckpointId: ${widget.checkpointId}');
+      print('   selectedCategoryId prop: ${widget.selectedCategoryId}');
+      print('   selectedSeverity prop: ${widget.selectedSeverity}');
+      print('   initialData: ${widget.initialData}');
+    }
+
+    // Initialize category and severity from widget props first
     selectedCategory = widget.selectedCategoryId;
     selectedSeverity = widget.selectedSeverity;
+
+    // Then initialize data (which may override if initialData has values)
+    _initializeData();
+
+    if (kDebugMode && widget.role == 'reviewer') {
+      print('   AFTER init - selectedCategory: $selectedCategory');
+      print('   AFTER init - selectedSeverity: $selectedSeverity');
+    }
 
     // Fetch existing images for this checkpoint/subquestion
     _fetchExistingImages();
@@ -1268,6 +1284,19 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
   @override
   void didUpdateWidget(SubQuestionCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    if (kDebugMode && widget.role == 'reviewer') {
+      if (widget.selectedCategoryId != oldWidget.selectedCategoryId ||
+          widget.selectedSeverity != oldWidget.selectedSeverity) {
+        print('\n🔄 SubQuestionCard.didUpdateWidget()');
+        print('   Question: ${widget.subQuestion}');
+        print('   Old categoryId: ${oldWidget.selectedCategoryId}');
+        print('   New categoryId: ${widget.selectedCategoryId}');
+        print('   Old severity: ${oldWidget.selectedSeverity}');
+        print('   New severity: ${widget.selectedSeverity}');
+      }
+    }
+
     // Sync category and severity from parent when they change
     if (widget.selectedCategoryId != oldWidget.selectedCategoryId) {
       setState(() => selectedCategory = widget.selectedCategoryId);
@@ -1288,6 +1317,26 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
       if (remarkController.text != newRemark) remarkController.text = newRemark;
       final imgs = widget.initialData!['images'];
       if (imgs is List) _images = List<Map<String, dynamic>>.from(imgs);
+
+      // Extract categoryId and severity from initialData for reviewer role
+      // Prefer initialData over widget props
+      if (widget.role == 'reviewer') {
+        final catId = (widget.initialData!['categoryId'] ?? '').toString();
+        if (catId.isNotEmpty) {
+          selectedCategory = catId;
+          if (kDebugMode) {
+            print('   📌 Set selectedCategory from initialData: $catId');
+          }
+        }
+
+        final sev = (widget.initialData!['severity'] ?? '').toString();
+        if (sev.isNotEmpty) {
+          selectedSeverity = sev;
+          if (kDebugMode) {
+            print('   📌 Set selectedSeverity from initialData: $sev');
+          }
+        }
+      }
     }
   }
 
@@ -1297,11 +1346,31 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
     super.dispose();
   }
 
-  Future<void> _updateAnswer() => widget.onAnswer({
-    "answer": selectedOption,
-    "remark": remarkController.text,
-    "images": _images,
-  });
+  Future<void> _updateAnswer() {
+    final answerData = <String, dynamic>{
+      "answer": selectedOption,
+      "remark": remarkController.text,
+      "images": _images,
+    };
+
+    // Include categoryId and severity for reviewer role
+    if (widget.role == 'reviewer') {
+      // Always include these fields, even if null, so they can be cleared
+      answerData['categoryId'] = selectedCategory ?? '';
+      answerData['severity'] = selectedSeverity ?? '';
+
+      if (kDebugMode) {
+        print('📝 SubQuestionCard._updateAnswer()');
+        print('   Question: ${widget.subQuestion}');
+        print('   CheckpointId: ${widget.checkpointId}');
+        print('   Answer: ${answerData['answer']}');
+        print('   CategoryId: ${answerData['categoryId']}');
+        print('   Severity: ${answerData['severity']}');
+      }
+    }
+
+    return widget.onAnswer(answerData);
+  }
 
   Future<void> _pickImages() async {
     try {
@@ -1515,95 +1584,103 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
         // Add defect category and severity for reviewer role
         if (widget.role == 'reviewer') ...[
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: Colors.grey.shade100,
-                    labelText: 'Defect Category',
-                    border: const OutlineInputBorder(
-                      borderSide: BorderSide.none,
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: selectedCategory,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.grey.shade100,
+                      labelText: 'Defect Category',
+                      border: const OutlineInputBorder(
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('None')),
-                    ...widget.availableCategories.map((cat) {
-                      final id = (cat['_id'] ?? '').toString();
-                      final name = (cat['name'] ?? 'Unknown').toString();
-                      return DropdownMenuItem(value: id, child: Text(name));
-                    }),
-                  ],
-                  onChanged: widget.editable
-                      ? (val) {
-                          setState(() => selectedCategory = val);
-                          // Update parent state only, no backend call
-                          if (widget.checkpointId != null &&
-                              widget.onCategoryAssigned != null) {
-                            widget.onCategoryAssigned!(
-                              widget.checkpointId!,
-                              val,
-                              severity: selectedSeverity,
-                            );
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('None')),
+                      ...widget.availableCategories.map((cat) {
+                        final id = (cat['_id'] ?? '').toString();
+                        final name = (cat['name'] ?? 'Unknown').toString();
+                        return DropdownMenuItem(
+                          value: id,
+                          child: Text(name, overflow: TextOverflow.ellipsis),
+                        );
+                      }),
+                    ],
+                    onChanged: widget.editable
+                        ? (val) {
+                            setState(() => selectedCategory = val);
+                            // Update parent state only, no backend call
+                            if (widget.checkpointId != null &&
+                                widget.onCategoryAssigned != null) {
+                              widget.onCategoryAssigned!(
+                                widget.checkpointId!,
+                                val,
+                                severity: selectedSeverity,
+                              );
+                            }
+                            // Save will happen through updateCheckpointResponse
+                            _updateAnswer();
                           }
-                          // Save will happen through updateCheckpointResponse
-                          _updateAnswer();
-                        }
-                      : null,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: selectedSeverity,
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: Colors.grey.shade100,
-                    labelText: 'Severity',
-                    border: const OutlineInputBorder(
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
+                        : null,
                   ),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('None')),
-                    DropdownMenuItem(
-                      value: 'Critical',
-                      child: Text('Critical'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'Non-Critical',
-                      child: Text('Non-Critical'),
-                    ),
-                  ],
-                  onChanged: widget.editable
-                      ? (val) {
-                          setState(() => selectedSeverity = val);
-                          // Update parent state only, no backend call
-                          if (widget.checkpointId != null &&
-                              widget.onCategoryAssigned != null) {
-                            widget.onCategoryAssigned!(
-                              widget.checkpointId!,
-                              selectedCategory,
-                              severity: val,
-                            );
-                          }
-                          // Save will happen through updateCheckpointResponse
-                          _updateAnswer();
-                        }
-                      : null,
                 ),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: selectedSeverity,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.grey.shade100,
+                      labelText: 'Severity',
+                      border: const OutlineInputBorder(
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('None')),
+                      DropdownMenuItem(
+                        value: 'Critical',
+                        child: Text('Critical'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Non-Critical',
+                        child: Text('Non-Critical'),
+                      ),
+                    ],
+                    onChanged: widget.editable
+                        ? (val) {
+                            setState(() => selectedSeverity = val);
+                            // Update parent state only, no backend call
+                            if (widget.checkpointId != null &&
+                                widget.onCategoryAssigned != null) {
+                              widget.onCategoryAssigned!(
+                                widget.checkpointId!,
+                                selectedCategory,
+                                severity: val,
+                              );
+                            }
+                            // Save will happen through updateCheckpointResponse
+                            _updateAnswer();
+                          }
+                        : null,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
         if (_images.isNotEmpty)

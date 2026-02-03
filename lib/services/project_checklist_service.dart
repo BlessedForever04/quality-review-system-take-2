@@ -41,10 +41,7 @@ class ProjectChecklistService {
     final uri = Uri.parse(
       '${ApiConfig.checklistBaseUrl}/projects/$projectId/stages/$stageId/checklist/groups/$groupId/questions/$questionId/executor',
     );
-    final payload = {
-      'answer': answer,
-      if (remark != null) 'remark': remark,
-    };
+    final payload = {'answer': answer, if (remark != null) 'remark': remark};
     final json = await http.patchJson(uri, payload);
     return (json['data'] as Map<String, dynamic>? ?? {});
   }
@@ -56,6 +53,8 @@ class ProjectChecklistService {
     String questionId, {
     required String? status,
     String? remark,
+    String? categoryId,
+    String? severity,
   }) async {
     _ensureToken();
     final uri = Uri.parse(
@@ -64,6 +63,8 @@ class ProjectChecklistService {
     final payload = {
       'status': status,
       if (remark != null) 'remark': remark,
+      if (categoryId != null && categoryId.isNotEmpty) 'categoryId': categoryId,
+      if (severity != null && severity.isNotEmpty) 'severity': severity,
     };
     final json = await http.patchJson(uri, payload);
     return (json['data'] as Map<String, dynamic>? ?? {});
