@@ -1277,8 +1277,10 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
       print('   AFTER init - selectedSeverity: $selectedSeverity');
     }
 
-    // Fetch existing images for this checkpoint/subquestion
-    _fetchExistingImages();
+    // Images are already loaded from initialData['images'] which correctly
+    // separates executorImages and reviewerImages from ProjectChecklist
+    // No need to fetch from GridFS separately
+    // _fetchExistingImages(); // REMOVED: causes images to show on wrong side
   }
 
   @override
@@ -1379,7 +1381,7 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
         type: FileType.image,
       );
       if (result != null && result.files.isNotEmpty) {
-        // Upload each selected image to backend GridFS, associated by questionId
+        // Upload each selected image to backend GridFS, associated by questionId and role
         final uploaded = <Map<String, dynamic>>[];
         for (final f in result.files) {
           if (f.bytes == null) continue;
@@ -1387,7 +1389,7 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
             final req = await http.MultipartRequest(
               'POST',
               Uri.parse(
-                '$_backendBaseUrl/api/v1/images/${widget.checkpointId ?? widget.subQuestion}',
+                '$_backendBaseUrl/api/v1/images/${widget.checkpointId ?? widget.subQuestion}?role=${widget.role}',
               ),
             );
             req.files.add(
@@ -1417,7 +1419,7 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
     if (qid.isEmpty) return;
     try {
       final resp = await http.get(
-        Uri.parse('$_backendBaseUrl/api/v1/images/$qid'),
+        Uri.parse('$_backendBaseUrl/api/v1/images/$qid?role=${widget.role}'),
       );
       if (resp.statusCode == 200) {
         final list = (jsonDecode(resp.body) as List?) ?? [];
