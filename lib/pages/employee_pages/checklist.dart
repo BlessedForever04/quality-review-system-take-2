@@ -9,6 +9,7 @@ import 'dart:convert';
 // import 'package:url_launcher/url_launcher.dart';
 import 'checklist_controller.dart';
 import '../../services/phase_checklist_service.dart';
+import '../../services/iteration_service.dart';
 
 // import '../../config/api_config.dart';
 // Simple backend base URL for uploads; adjust if needed
@@ -274,6 +275,7 @@ class RoleColumn extends StatelessWidget {
   final String role;
   final Color color;
   final String projectId;
+  final String? stageId; // Added: for fetching iterations
   final int phase;
   final bool canEdit;
   final List<Question> checklist;
@@ -319,6 +321,7 @@ class RoleColumn extends StatelessWidget {
     required this.onExpand,
     required this.onAnswer,
     required this.onSubmit,
+    this.stageId,
     this.onRevert,
     this.isCurrentUserReviewer = false,
     this.editMode = false,
@@ -765,6 +768,9 @@ class RoleColumn extends StatelessWidget {
                                             onCategoryAssigned: canEdit
                                                 ? onCategoryAssigned
                                                 : null,
+                                            projectId: projectId,
+                                            stageId: stageId,
+                                            questionId: key,
                                           ),
                                         ],
                                       ),
@@ -1232,6 +1238,9 @@ class SubQuestionCard extends StatefulWidget {
   final Function(String checkpointId, String? categoryId, {String? severity})?
   onCategoryAssigned; // Added: callback for category assignment
   final String role; // Added: to restrict category UI to reviewer only
+  final String? projectId; // Added: for fetching iterations
+  final String? stageId; // Added: for fetching iterations
+  final String? questionId; // Added: the MongoDB _id of this question
 
   const SubQuestionCard({
     super.key,
@@ -1247,6 +1256,9 @@ class SubQuestionCard extends StatefulWidget {
     this.availableCategories = const [],
     this.onCategoryAssigned,
     this.role = 'reviewer', // Default to reviewer for backward compatibility
+    this.projectId,
+    this.stageId,
+    this.questionId,
   });
 
   @override
@@ -1262,6 +1274,13 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
   Timer? _debounceTimer;
   List<Map<String, dynamic>> _suggestedCategories =
       []; // Added: for showing suggestion chips
+
+  // Iteration history
+  List<Map<String, dynamic>> _iterations = [];
+  int _currentIteration = 1;
+  int _selectedIterationNumber =
+      0; // 0 means current, 1+ means viewing past iteration
+  bool _loadingIterations = false;
 
   @override
   void initState() {
@@ -1282,6 +1301,11 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
 
     // Then initialize data (which may override if initialData has values)
     _initializeData();
+
+    // Load iterations if we have the necessary IDs
+    if (widget.projectId != null && widget.stageId != null) {
+      _loadIterations();
+    }
 
     if (kDebugMode && widget.role == 'reviewer') {
       print('   AFTER init - selectedCategory: $selectedCategory');
@@ -1350,6 +1374,123 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
           }
         }
       }
+    }
+  }
+
+  Future<void> _loadIterations() async {
+    if (widget.projectId == null ||
+        widget.stageId == null ||
+        widget.questionId == null) {
+      return;
+    }
+
+    // Prevent concurrent loads
+    if (_loadingIterations) return;
+    setState(() => _loadingIterations = true);
+
+    try {
+      final iterationService = IterationService();
+      final result = await iterationService.getIterations(
+        widget.projectId!,
+        widget.stageId!,
+      );
+
+      if (mounted) {
+        setState(() {
+          _iterations = List<Map<String, dynamic>>.from(
+            result['iterations'] ?? [],
+          );
+          _currentIteration = result['currentIteration'] ?? 1;
+          _loadingIterations = false;
+        });
+
+        if (kDebugMode) {
+          print(
+            '📚 Loaded ${_iterations.length} iterations for question: ${widget.subQuestion}',
+          );
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error loading iterations: $e');
+      }
+      if (mounted) {
+        setState(() => _loadingIterations = false);
+      }
+    }
+  }
+
+  void _viewIteration(int iterationNumber) {
+    if (iterationNumber == 0) {
+      // View current iteration (reset to current data)
+      setState(() {
+        _selectedIterationNumber = 0;
+        _initializeData(); // Reset to current data
+      });
+      return;
+    }
+
+    // Find the iteration
+    final iteration = _iterations.firstWhere(
+      (it) => it['iterationNumber'] == iterationNumber,
+      orElse: () => {},
+    );
+
+    if (iteration.isEmpty) return;
+
+    // Find this question in the iteration
+    final iterationService = IterationService();
+    final questionData = iterationService.findQuestionInIteration(
+      iteration,
+      widget.questionId!,
+    );
+
+    if (questionData == null) {
+      if (kDebugMode) {
+        print('⚠️ Question not found in iteration $iterationNumber');
+      }
+      return;
+    }
+
+    // Extract answers based on role
+    final answers = iterationService.extractAnswersFromQuestion(questionData);
+
+    if (kDebugMode) {
+      print(
+        '👁️ Viewing iteration $iterationNumber for question: ${widget.subQuestion}',
+      );
+      print('   Role: ${widget.role}');
+      if (widget.role == 'executor') {
+        print('   Executor images: ${answers['executorImages']}');
+      } else {
+        print('   Reviewer images: ${answers['reviewerImages']}');
+      }
+    }
+
+    setState(() {
+      _selectedIterationNumber = iterationNumber;
+
+      // Update displayed data based on role
+      if (widget.role == 'executor') {
+        selectedOption = answers['executorAnswer'];
+        remarkController.text = answers['executorRemark'] ?? '';
+        _images = List<Map<String, dynamic>>.from(
+          answers['executorImages'] ?? [],
+        );
+      } else if (widget.role == 'reviewer') {
+        selectedOption = answers['reviewerAnswer'];
+        remarkController.text = answers['reviewerRemark'] ?? '';
+        _images = List<Map<String, dynamic>>.from(
+          answers['reviewerImages'] ?? [],
+        );
+        selectedCategory = answers['categoryId']?.toString();
+        selectedSeverity = answers['severity']?.toString();
+      }
+    });
+
+    if (kDebugMode) {
+      print('   Images set in state: $_images');
+      print('   Images count: ${_images.length}');
     }
   }
 
@@ -1425,30 +1566,6 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
     }
   }
 
-  Future<void> _fetchExistingImages() async {
-    final qid = widget.checkpointId ?? widget.subQuestion;
-    if (qid.isEmpty) return;
-    try {
-      final resp = await http.get(
-        Uri.parse('$_backendBaseUrl/api/v1/images/$qid?role=${widget.role}'),
-      );
-      if (resp.statusCode == 200) {
-        final list = (jsonDecode(resp.body) as List?) ?? [];
-        final imgs = list
-            .whereType<Map>()
-            .map(
-              (m) => {
-                'fileId': (m['_id'] ?? '').toString(),
-                'filename': (m['filename'] ?? '').toString(),
-              },
-            )
-            .where((m) => (m['fileId'] ?? '').toString().isNotEmpty)
-            .toList();
-        if (mounted) setState(() => _images = imgs);
-      }
-    } catch (_) {}
-  }
-
   @override
   Widget build(BuildContext context) {
     // final currentCat = _currentSelectedCategory();
@@ -1466,14 +1583,124 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                 ),
               ),
             ),
+            // Iteration history dropdown - show only if we have iterations
+            if (_iterations.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _selectedIterationNumber == 0
+                      ? Colors.green.shade50
+                      : Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _selectedIterationNumber == 0
+                        ? Colors.green.shade300
+                        : Colors.orange.shade300,
+                    width: 1,
+                  ),
+                ),
+                child: DropdownButton<int>(
+                  value: _selectedIterationNumber,
+                  underline: const SizedBox(),
+                  isDense: true,
+                  icon: Icon(
+                    Icons.history,
+                    size: 18,
+                    color: _selectedIterationNumber == 0
+                        ? Colors.green.shade700
+                        : Colors.orange.shade700,
+                  ),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: _selectedIterationNumber == 0
+                        ? Colors.green.shade700
+                        : Colors.orange.shade700,
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: 0,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.fiber_manual_record,
+                            size: 8,
+                            color: Colors.green.shade700,
+                          ),
+                          const SizedBox(width: 4),
+                          Text('Current (v$_currentIteration)'),
+                        ],
+                      ),
+                    ),
+                    ..._iterations.map((iteration) {
+                      final iterNum = iteration['iterationNumber'] as int;
+                      return DropdownMenuItem(
+                        value: iterNum,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.history,
+                              size: 12,
+                              color: Colors.orange.shade700,
+                            ),
+                            const SizedBox(width: 4),
+                            Text('Iteration $iterNum'),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      _viewIteration(value);
+                    }
+                  },
+                ),
+              ),
+            ],
             if (widget.categoryInfo != null) ...[],
           ],
         ),
+        // Show viewing notice when viewing past iteration
+        if (_selectedIterationNumber > 0) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade100,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.orange.shade300),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: Colors.orange.shade800,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Viewing Iteration $_selectedIterationNumber (Read-only)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.orange.shade800,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         RadioListTile<String>(
           title: const Text("Yes"),
           value: "Yes",
           groupValue: selectedOption,
-          onChanged: widget.editable
+          onChanged: (widget.editable && _selectedIterationNumber == 0)
               ? (val) async {
                   setState(() => selectedOption = val);
                   await _updateAnswer();
@@ -1484,7 +1711,7 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
           title: const Text("No"),
           value: "No",
           groupValue: selectedOption,
-          onChanged: widget.editable
+          onChanged: (widget.editable && _selectedIterationNumber == 0)
               ? (val) async {
                   setState(() => selectedOption = val);
                   await _updateAnswer();
@@ -1492,7 +1719,9 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
               : null,
         ),
         // Allow clearing an existing answer when editable
-        if (widget.editable && selectedOption != null)
+        if (widget.editable &&
+            selectedOption != null &&
+            _selectedIterationNumber == 0)
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
@@ -1511,20 +1740,24 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
             Expanded(
               child: TextField(
                 controller: remarkController,
-                onChanged: widget.editable ? _onRemarkChanged : null,
+                onChanged: (widget.editable && _selectedIterationNumber == 0)
+                    ? _onRemarkChanged
+                    : null,
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: Colors.grey.shade100,
                   hintText: "Remark",
                   border: const OutlineInputBorder(borderSide: BorderSide.none),
                 ),
-                enabled: widget.editable,
+                enabled: (widget.editable && _selectedIterationNumber == 0),
                 maxLines: null,
               ),
             ),
             IconButton(
               icon: const Icon(Icons.add_a_photo_outlined),
-              onPressed: widget.editable ? _pickImages : null,
+              onPressed: (widget.editable && _selectedIterationNumber == 0)
+                  ? _pickImages
+                  : null,
             ),
           ],
         ),
@@ -1620,7 +1853,8 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                         );
                       }),
                     ],
-                    onChanged: widget.editable
+                    onChanged:
+                        (widget.editable && _selectedIterationNumber == 0)
                         ? (val) {
                             setState(() => selectedCategory = val);
                             // Update parent state only, no backend call
@@ -1666,7 +1900,8 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                         child: Text('Non-Critical'),
                       ),
                     ],
-                    onChanged: widget.editable
+                    onChanged:
+                        (widget.editable && _selectedIterationNumber == 0)
                         ? (val) {
                             setState(() => selectedSeverity = val);
                             // Update parent state only, no backend call
@@ -1696,18 +1931,33 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
               itemCount: _images.length,
               itemBuilder: (context, i) {
                 final img = _images[i];
+
+                if (kDebugMode) {
+                  print('🖼️ Rendering image $i: $img');
+                }
+
                 final bytes = img['bytes'] is Uint8List
                     ? img['bytes'] as Uint8List
                     : null;
                 final name = img['name'] is String
                     ? img['name'] as String
-                    : null;
+                    : (img['filename'] is String
+                          ? img['filename'] as String
+                          : null);
+
                 // If we have local bytes (just picked), show memory; else try server fileId
-                final fileId = img['fileId'] is String
-                    ? img['fileId'] as String
-                    : '';
+                // Handle both string and ObjectId formats
+                final fileId = (img['fileId'] ?? '').toString();
+
+                if (kDebugMode) {
+                  print('   bytes: ${bytes != null ? "present" : "null"}');
+                  print('   fileId: $fileId');
+                  print('   name: $name');
+                }
+
                 if (bytes == null && fileId.isEmpty)
                   return const SizedBox.shrink();
+
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: Stack(
@@ -1732,12 +1982,62 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                                   width: 100,
                                   height: 100,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Container(
-                                    width: 100,
-                                    height: 100,
-                                    color: Colors.grey.shade300,
-                                    child: const Icon(Icons.broken_image),
-                                  ),
+                                  loadingBuilder:
+                                      (context, child, loadingProgress) {
+                                        if (loadingProgress == null)
+                                          return child;
+                                        return Container(
+                                          width: 100,
+                                          height: 100,
+                                          color: Colors.grey.shade200,
+                                          child: Center(
+                                            child: CircularProgressIndicator(
+                                              value:
+                                                  loadingProgress
+                                                          .expectedTotalBytes !=
+                                                      null
+                                                  ? loadingProgress
+                                                            .cumulativeBytesLoaded /
+                                                        loadingProgress
+                                                            .expectedTotalBytes!
+                                                  : null,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                  errorBuilder: (_, error, ___) {
+                                    if (kDebugMode) {
+                                      print(
+                                        '❌ Failed to load image $fileId: $error',
+                                      );
+                                    }
+                                    return Container(
+                                      width: 100,
+                                      height: 100,
+                                      color: Colors.grey.shade300,
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.broken_image,
+                                            color: Colors.grey.shade600,
+                                            size: 32,
+                                          ),
+                                          if (_selectedIterationNumber > 0) ...[
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Missing',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    );
+                                  },
                                 ),
                         ),
                       ),

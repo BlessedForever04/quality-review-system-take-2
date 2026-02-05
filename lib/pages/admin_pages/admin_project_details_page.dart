@@ -87,6 +87,14 @@ class _AdminProjectDetailsPageState extends State<AdminProjectDetailsPage> {
         '[AdminProjectDetail] Loaded ${memberships.length} memberships',
       );
 
+      // Log each membership for debugging
+      for (var i = 0; i < memberships.length; i++) {
+        final m = memberships[i];
+        debugPrint(
+          '[AdminProjectDetail] Member $i: ${m.userName} (${m.userEmail}) - Role: ${m.roleName}',
+        );
+      }
+
       final leaders = memberships
           .where((m) => (m.roleName?.toLowerCase() ?? '') == 'teamleader')
           .toList();
@@ -107,6 +115,10 @@ class _AdminProjectDetailsPageState extends State<AdminProjectDetailsPage> {
           _executors = execs;
           _reviewers = reviewers;
         });
+
+        debugPrint(
+          '[AdminProjectDetail] State updated - displaying ${_teamLeaders.length + _executors.length + _reviewers.length} total members',
+        );
       }
     } catch (e, stackTrace) {
       debugPrint('[AdminProjectDetail] loadAssignments error: $e');

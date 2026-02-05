@@ -20,38 +20,76 @@ class ProjectMembershipService {
         '${ApiConfig.baseUrl}/projects/members?project_id=$projectId',
       );
       // ignore: avoid_print
-      print(
-        '[ProjectMembershipService] getProjectMembers -> GET $uri',
-      );
+      print('[ProjectMembershipService] getProjectMembers -> GET $uri');
       final json = await http.getJson(uri);
       // ignore: avoid_print
       print(
-        '[ProjectMembershipService] getProjectMembers <- response keys=${json.keys.join(', ')}',
+        '[ProjectMembershipService] getProjectMembers <- Full response: $json',
       );
-      if (json['error'] != null) {
+
+      // Check for API errors
+      if (json['success'] == false) {
         // ignore: avoid_print
         print(
-          '[ProjectMembershipService] getProjectMembers ERROR: ${json['error']}',
+          '[ProjectMembershipService] getProjectMembers API returned success=false: ${json['message']}',
         );
+        return [];
       }
 
-      if (json['data'] is Map && json['data']['members'] is List) {
-        final members = (json['data']['members'] as List).cast<dynamic>();
+      if (json['data'] is Map) {
+        final data = json['data'] as Map<String, dynamic>;
         // ignore: avoid_print
         print(
-          '[ProjectMembershipService] getProjectMembers parsed members count=${members.length}',
+          '[ProjectMembershipService] getProjectMembers data keys: ${data.keys.join(', ')}',
         );
-        return members.map((e) => _fromApi(e as Map<String, dynamic>)).toList();
+
+        if (data['members'] is List) {
+          final members = (data['members'] as List).cast<dynamic>();
+          // ignore: avoid_print
+          print(
+            '[ProjectMembershipService] getProjectMembers found ${members.length} members',
+          );
+
+          // Parse each member with detailed logging
+          final result = <ProjectMembership>[];
+          for (var i = 0; i < members.length; i++) {
+            try {
+              final memberJson = members[i] as Map<String, dynamic>;
+              // ignore: avoid_print
+              print(
+                '[ProjectMembershipService] Parsing member $i: ${memberJson.keys.join(', ')}',
+              );
+              final membership = _fromApi(memberJson);
+              // ignore: avoid_print
+              print(
+                '[ProjectMembershipService] Parsed member $i: ${membership.userName} (${membership.roleName})',
+              );
+              result.add(membership);
+            } catch (e, stack) {
+              // ignore: avoid_print
+              print(
+                '[ProjectMembershipService] Failed to parse member $i: $e\n$stack',
+              );
+            }
+          }
+
+          // ignore: avoid_print
+          print(
+            '[ProjectMembershipService] Successfully parsed ${result.length}/${members.length} members',
+          );
+          return result;
+        }
       }
+
       // ignore: avoid_print
       print(
-        '[ProjectMembershipService] getProjectMembers parsed members count=0 (no data.members list)',
+        '[ProjectMembershipService] getProjectMembers - unexpected response structure',
       );
       return [];
-    } catch (e) {
+    } catch (e, stack) {
       // ignore: avoid_print
       print(
-        '[ProjectMembershipService] getProjectMembers failed for project=$projectId: $e',
+        '[ProjectMembershipService] getProjectMembers failed for project=$projectId: $e\n$stack',
       );
       // If fetching existing members fails (e.g., orphaned user references),
       // return empty list so we can still add new valid members
