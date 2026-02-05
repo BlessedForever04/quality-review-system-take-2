@@ -2041,13 +2041,12 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                                 ),
                         ),
                       ),
-                      if (widget.editable)
+                      if (widget.editable && _selectedIterationNumber == 0)
                         Positioned(
                           right: 4,
                           top: 4,
                           child: GestureDetector(
                             onTap: () async {
-                              if (!widget.editable) return;
                               final fileId = (img['fileId'] ?? '').toString();
                               // If this image exists on server, request deletion
                               if (fileId.isNotEmpty) {
@@ -2079,12 +2078,16 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                                         '$_backendBaseUrl/api/v1/images/file/$fileId',
                                       ),
                                     );
+                                    // Remove from local list only after deletion confirmed
+                                    setState(() => _images.removeAt(i));
+                                    await _updateAnswer();
                                   }
-                                  // Proceed to remove locally regardless of response
                                 } catch (_) {}
+                              } else {
+                                // For local images without fileId, just remove
+                                setState(() => _images.removeAt(i));
+                                await _updateAnswer();
                               }
-                              setState(() => _images.removeAt(i));
-                              await _updateAnswer();
                             },
                             child: const CircleAvatar(
                               radius: 10,
