@@ -69,4 +69,25 @@ class ProjectChecklistService {
     final json = await http.patchJson(uri, payload);
     return (json['data'] as Map<String, dynamic>? ?? {});
   }
+
+  Future<Map<String, dynamic>> getDefectRatesPerIteration(
+    String projectId,
+    int phase,
+  ) async {
+    _ensureToken();
+    final uri = Uri.parse(
+      '${ApiConfig.checklistBaseUrl}/projects/$projectId/defect-rates?phase=$phase',
+    );
+    final json = await http.getJson(uri);
+    return (json['data'] as Map<String, dynamic>? ?? {});
+  }
+
+  Future<Map<String, dynamic>> getOverallDefectRate(String projectId) async {
+    _ensureToken();
+    final uri = Uri.parse(
+      '${ApiConfig.checklistBaseUrl}/projects/$projectId/overall-defect-rate',
+    );
+    final json = await http.getJson(uri);
+    return (json['data'] as Map<String, dynamic>? ?? {});
+  }
 }

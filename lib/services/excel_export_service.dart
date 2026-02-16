@@ -199,6 +199,12 @@ class ExcelExportService {
     addRow('Project Leader', projectLeader ?? '');
     addRow('Executors', executors.isNotEmpty ? executors.join(', ') : '');
     addRow('Reviewers', reviewers.isNotEmpty ? reviewers.join(', ') : '');
+    addRow(
+      'Is Review Applicable',
+      project.isReviewApplicable == null
+          ? ''
+          : (project.isReviewApplicable == true ? 'Yes' : 'No'),
+    );
 
     // Set column widths for better readability
     sheet.setColumnWidth(0, 25);

@@ -56,6 +56,12 @@ class ProjectService {
           .toList();
     }
 
+    // Handle isReviewApplicable field
+    bool? isReviewApplicable;
+    if (j.containsKey('isReviewApplicable')) {
+      isReviewApplicable = j['isReviewApplicable'] as bool?;
+    }
+
     return Project(
       id: id,
       projectNo: projectNo,
@@ -67,6 +73,7 @@ class ProjectService {
       status: status,
       executor: creatorName ?? creatorId, // Use creator name or ID
       assignedEmployees: assignedEmployees, // From backend or null
+      isReviewApplicable: isReviewApplicable,
     );
   }
 
@@ -90,6 +97,8 @@ class ProjectService {
       'priority': priority,
       'start_date': p.started.toIso8601String(),
       if (userId != null) 'created_by': userId,
+      if (p.isReviewApplicable != null)
+        'isReviewApplicable': p.isReviewApplicable,
     };
   }
 

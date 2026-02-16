@@ -5,6 +5,7 @@ import '../../models/project.dart';
 import '../../controllers/projects_controller.dart';
 import '../../controllers/team_controller.dart';
 import '../../controllers/export_controller.dart';
+import '../../components/project_statistics_card.dart';
 
 class EmployeeDashboard extends StatefulWidget {
   const EmployeeDashboard({super.key});
@@ -146,7 +147,10 @@ class _AdminDashboardPageState extends State<EmployeeDashboard> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
+              // Project Statistics
+              const ProjectStatisticsCard(),
+              const SizedBox(height: 16),
               // Search bar
               Container(
                 decoration: BoxDecoration(

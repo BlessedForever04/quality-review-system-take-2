@@ -10,6 +10,8 @@ class Project {
   String status; // Pending, In Progress, Completed, Not Started
   String? executor;
   List<String>? assignedEmployees;
+  bool?
+  isReviewApplicable; // Toggle: null = not set, true = Yes (normal workflow), false = No (mark as Completed)
 
   // New attributes from Excel import
   String? groupOrCostCentre;
@@ -38,6 +40,7 @@ class Project {
     required this.status,
     this.executor,
     this.assignedEmployees,
+    this.isReviewApplicable,
     this.groupOrCostCentre,
     this.actionRequired,
     this.sponsor,
@@ -65,6 +68,7 @@ class Project {
     String? status,
     String? executor,
     List<String>? assignedEmployees,
+    bool? isReviewApplicable,
     String? groupOrCostCentre,
     String? actionRequired,
     String? sponsor,
@@ -91,6 +95,7 @@ class Project {
       status: status ?? this.status,
       executor: executor ?? this.executor,
       assignedEmployees: assignedEmployees ?? this.assignedEmployees,
+      isReviewApplicable: isReviewApplicable ?? this.isReviewApplicable,
       groupOrCostCentre: groupOrCostCentre ?? this.groupOrCostCentre,
       actionRequired: actionRequired ?? this.actionRequired,
       sponsor: sponsor ?? this.sponsor,
@@ -140,8 +145,10 @@ class Project {
       priority: map['priority'] ?? 'Medium',
       status: map['status'] ?? 'Not Started',
       executor: map['executor'],
-      assignedEmployees:
-          (map['assignedEmployees'] as List?)?.map((e) => e.toString()).toList(),
+      assignedEmployees: (map['assignedEmployees'] as List?)
+          ?.map((e) => e.toString())
+          .toList(),
+      isReviewApplicable: map['isReviewApplicable'],
       groupOrCostCentre: map['groupOrCostCentre'],
       actionRequired: map['actionRequired'],
       sponsor: map['sponsor'],
@@ -160,29 +167,30 @@ class Project {
   }
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'projectNo': projectNo,
-        'internalOrderNo': internalOrderNo,
-        'title': title,
-        'description': description,
-        'started': started.toIso8601String(),
-        'priority': priority,
-        'status': status,
-        'executor': executor,
-        'assignedEmployees': assignedEmployees,
-        'groupOrCostCentre': groupOrCostCentre,
-        'actionRequired': actionRequired,
-        'sponsor': sponsor,
-        'competence': competence,
-        'competenceManager': competenceManager,
-        'projectLeader': projectLeader,
-        'projectTeam': projectTeam,
-        'createdBy': createdBy,
-        'creationOn': creationOn?.toIso8601String(),
-        'requiredDeliveryDate': requiredDeliveryDate?.toIso8601String(),
-        'plannedEndDate': plannedEndDate?.toIso8601String(),
-        'actualDeliveryDate': actualDeliveryDate?.toIso8601String(),
-        'plannedEfforts': plannedEfforts,
-        'actualEfforts': actualEfforts,
-      };
+    'id': id,
+    'projectNo': projectNo,
+    'internalOrderNo': internalOrderNo,
+    'title': title,
+    'description': description,
+    'started': started.toIso8601String(),
+    'priority': priority,
+    'status': status,
+    'executor': executor,
+    'assignedEmployees': assignedEmployees,
+    'isReviewApplicable': isReviewApplicable,
+    'groupOrCostCentre': groupOrCostCentre,
+    'actionRequired': actionRequired,
+    'sponsor': sponsor,
+    'competence': competence,
+    'competenceManager': competenceManager,
+    'projectLeader': projectLeader,
+    'projectTeam': projectTeam,
+    'createdBy': createdBy,
+    'creationOn': creationOn?.toIso8601String(),
+    'requiredDeliveryDate': requiredDeliveryDate?.toIso8601String(),
+    'plannedEndDate': plannedEndDate?.toIso8601String(),
+    'actualDeliveryDate': actualDeliveryDate?.toIso8601String(),
+    'plannedEfforts': plannedEfforts,
+    'actualEfforts': actualEfforts,
+  };
 }

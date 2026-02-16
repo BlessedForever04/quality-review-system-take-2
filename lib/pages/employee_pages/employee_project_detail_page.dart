@@ -9,8 +9,6 @@ import '../../services/project_membership_service.dart';
 import '../../services/role_service.dart';
 import '../../models/role.dart';
 import '../../models/project_membership.dart';
-import '../../services/approval_service.dart';
-import '../../services/stage_service.dart';
 import '../../widgets/phase_overview_widget.dart';
 
 class EmployeeProjectDetailPage extends StatefulWidget {
@@ -182,6 +180,8 @@ class _EmployeeProjectDetailsPageState
                                   ? details.project.executor!.trim()
                                   : '--',
                             ),
+                            const Divider(height: 24),
+                            _buildReviewApplicableToggle(details),
                           ],
                         ),
                       ),
@@ -238,13 +238,46 @@ class _EmployeeProjectDetailsPageState
                             reviewers: _reviewers,
                           ),
                     const SizedBox(height: 24),
-                    if (details.project.status == 'Not Started')
+                    if (details.project.status == 'Not Started' &&
+                        details.project.isReviewApplicable == true)
                       _RoleAssignmentSections(
                         teamCtrl: _teamCtrl,
                         details: details,
                         projectId: details.project.id,
                         projectsCtrl: _projectsCtrl,
                         onAssignmentsChanged: _loadAssignments,
+                      ),
+                    if (details.project.status == 'Completed' ||
+                        details.project.isReviewApplicable == false ||
+                        (details.project.status == 'Not Started' &&
+                            details.project.isReviewApplicable == null))
+                      Card(
+                        color: Colors.grey[100],
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, color: Colors.grey[600]),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  details.project.isReviewApplicable == null
+                                      ? 'Please select "Yes" or "No" for "Is Review Applicable" above to proceed.'
+                                      : details.project.isReviewApplicable ==
+                                            true
+                                      ? 'Team member assignment is not available for completed projects.'
+                                      : details.project.status == 'Not Started'
+                                      ? 'Review is marked as not applicable. Change to "Yes" to enable team member assignment.'
+                                      : 'Team member assignment is not available because review is not applicable for this project.',
+                                  style: TextStyle(
+                                    color: Colors.grey[700],
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                   ],
                 ),
@@ -257,6 +290,149 @@ class _EmployeeProjectDetailsPageState
   void dispose() {
     Get.delete<ProjectDetailsController>(tag: widget.project.id);
     super.dispose();
+  }
+
+  Widget _buildReviewApplicableToggle(ProjectDetailsController details) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 120,
+            child: Text(
+              'Is Review Applicable',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Expanded(
+            child: Row(
+              children: [
+                if (details.project.isReviewApplicable == null)
+                  Row(
+                    children: [
+                      const Text(
+                        'Not Set',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      if (details.project.status == 'Not Started') ...[
+                        ElevatedButton(
+                          onPressed: () =>
+                              _handleReviewApplicableToggle(details, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            minimumSize: const Size(60, 32),
+                          ),
+                          child: const Text(
+                            'Yes',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () =>
+                              _handleReviewApplicableToggle(details, false),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            minimumSize: const Size(60, 32),
+                          ),
+                          child: const Text(
+                            'No',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ],
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: details.project.isReviewApplicable == true
+                          ? Colors.green.withOpacity(0.1)
+                          : Colors.red.withOpacity(0.1),
+                      border: Border.all(
+                        color: details.project.isReviewApplicable == true
+                            ? Colors.green
+                            : Colors.red,
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      details.project.isReviewApplicable == true ? 'Yes' : 'No',
+                      style: TextStyle(
+                        color: details.project.isReviewApplicable == true
+                            ? Colors.green[800]
+                            : Colors.red[800],
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleReviewApplicableToggle(
+    ProjectDetailsController details,
+    bool value,
+  ) async {
+    try {
+      final projectService = Get.find<ProjectService>();
+
+      // If toggling to No, set status to Completed
+      final newStatus = value ? details.project.status : 'Completed';
+
+      final updatedProject = details.project.copyWith(
+        isReviewApplicable: value,
+        status: newStatus,
+      );
+
+      await projectService.update(updatedProject);
+      details.seed(updatedProject);
+      _projectsCtrl.updateProject(updatedProject.id, updatedProject);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              value
+                  ? 'Review marked as applicable'
+                  : 'Review marked as not applicable - Project status changed to Completed',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating project: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _row(String label, String value) {

@@ -78,6 +78,12 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
   // Track loopback count per phase (key: phase number, value: loopback count)
   final Map<int, int> _loopbackCounters = {};
 
+  // Defect rate tracking
+  double _overallDefectRate = 0.0;
+  List<Map<String, dynamic>> _iterationsWithRates = [];
+  Map<String, dynamic>? _currentIterationStats;
+  int? _selectedIterationNumber;
+
   // Persisted reviewer submission summary per phase
   final Map<int, Map<String, dynamic>> _reviewerSubmissionSummaries = {};
 
@@ -698,6 +704,9 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
       // Silently fail on answer loading
     }
 
+    // Load defect rates
+    await _loadDefectRates();
+
     if (!mounted) return;
     setState(() {
       _isLoadingData = false;
@@ -744,6 +753,66 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
           }
         });
       }
+    }
+  }
+
+  /// Load defect rates per iteration and overall defect rate
+  Future<void> _loadDefectRates() async {
+    try {
+      final checklistService = Get.find<ProjectChecklistService>();
+
+      // Load defect rates per iteration for current phase
+      final iterationData = await checklistService.getDefectRatesPerIteration(
+        widget.projectId,
+        _selectedPhase,
+      );
+
+      // Load overall defect rate
+      final overallData = await checklistService.getOverallDefectRate(
+        widget.projectId,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        // Parse iterations data
+        final iterations = iterationData['iterations'] as List<dynamic>? ?? [];
+        _iterationsWithRates = iterations.map((iter) {
+          return {
+            'iterationNumber': iter['iterationNumber'] ?? 0,
+            'defectRate': (iter['defectRate'] ?? 0.0).toDouble(),
+            'totalDefects': iter['totalDefects'] ?? 0,
+            'totalQuestions': iter['totalQuestions'] ?? 0,
+            'revertedAt': iter['revertedAt'],
+            'revertNotes': iter['revertNotes'],
+          };
+        }).toList();
+
+        // Parse current iteration data
+        final current = iterationData['current'] as Map<String, dynamic>?;
+        if (current != null) {
+          _currentIterationStats = {
+            'iterationNumber': current['iterationNumber'] ?? 1,
+            'defectRate': (current['defectRate'] ?? 0.0).toDouble(),
+            'totalDefects': current['totalDefects'] ?? 0,
+            'totalQuestions': current['totalQuestions'] ?? 0,
+          };
+        }
+
+        // Parse overall defect rate
+        _overallDefectRate = (overallData['overallDefectRate'] ?? 0.0)
+            .toDouble();
+
+        // Initialize selected iteration to current iteration if not set
+        if (_selectedIterationNumber == null &&
+            _currentIterationStats != null) {
+          _selectedIterationNumber =
+              _currentIterationStats!['iterationNumber'] as int;
+        }
+      });
+    } catch (e) {
+      debugPrint('Error loading defect rates: $e');
+      // Silently fail - don't disrupt the UI
     }
   }
 
@@ -1359,16 +1428,18 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                         horizontal: 12,
                         vertical: 8,
                       ),
-                      child: Row(
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
                         children: [
-                          // Defect Rate
+                          // Overall Defect Rate
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.red.shade50,
+                              color: Colors.blue.shade50,
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                color: Colors.red.shade200,
+                                color: Colors.blue.shade200,
                                 width: 1.5,
                               ),
                             ),
@@ -1376,13 +1447,13 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  Icons.info_outline,
-                                  color: Colors.red.shade700,
+                                  Icons.assessment_outlined,
+                                  color: Colors.blue.shade700,
                                   size: 20,
                                 ),
                                 const SizedBox(width: 12),
                                 const Text(
-                                  'Defect Count',
+                                  'Overall Defect Rate',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 14,
@@ -1390,26 +1461,153 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                                   ),
                                 ),
                                 const SizedBox(width: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _overallDefectRate > 0
+                                        ? Colors.blue
+                                        : Colors.grey.shade600,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    '${_overallDefectRate.toStringAsFixed(2)}%',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Defect Rate per Iteration
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: Colors.orange.shade200,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.track_changes,
+                                  color: Colors.orange.shade700,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 12),
+                                const Text(
+                                  'Defect Rate per Iteration',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                // Dropdown for iteration selection
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.orange.shade300,
+                                    ),
+                                  ),
+                                  child: DropdownButton<int>(
+                                    value: _selectedIterationNumber,
+                                    underline: const SizedBox(),
+                                    isDense: true,
+                                    items: [
+                                      // Current iteration
+                                      if (_currentIterationStats != null)
+                                        DropdownMenuItem<int>(
+                                          value:
+                                              _currentIterationStats!['iterationNumber']
+                                                  as int,
+                                          child: Text(
+                                            'Current (${_currentIterationStats!['iterationNumber']})',
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                      // Previous iterations
+                                      ..._iterationsWithRates.map((iter) {
+                                        return DropdownMenuItem<int>(
+                                          value: iter['iterationNumber'] as int,
+                                          child: Text(
+                                            'Iteration ${iter['iterationNumber']}',
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        );
+                                      }),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _selectedIterationNumber = value;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Display defect rate for selected iteration
                                 Builder(
                                   builder: (context) {
-                                    // Get cumulative defect count from backend for current phase
-                                    final totalDefects =
-                                        _cumulativeDefectCount[_selectedPhase] ??
-                                        0;
-
+                                    double defectRate = 0.0;
+                                    if (_selectedIterationNumber != null) {
+                                      // Check if it's current iteration
+                                      if (_currentIterationStats != null &&
+                                          _selectedIterationNumber ==
+                                              _currentIterationStats!['iterationNumber']) {
+                                        defectRate =
+                                            (_currentIterationStats!['defectRate']
+                                                    as num)
+                                                .toDouble();
+                                      } else {
+                                        // Find in previous iterations
+                                        final iter = _iterationsWithRates
+                                            .firstWhere(
+                                              (i) =>
+                                                  i['iterationNumber'] ==
+                                                  _selectedIterationNumber,
+                                              orElse: () => {},
+                                            );
+                                        if (iter.isNotEmpty) {
+                                          defectRate =
+                                              (iter['defectRate'] as num)
+                                                  .toDouble();
+                                        }
+                                      }
+                                    }
                                     return Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 16,
                                         vertical: 8,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: totalDefects > 0
-                                            ? Colors.red
+                                        color: defectRate > 0
+                                            ? Colors.orange
                                             : Colors.grey.shade600,
                                         borderRadius: BorderRadius.circular(20),
                                       ),
                                       child: Text(
-                                        '$totalDefects',
+                                        '${defectRate.toStringAsFixed(2)}%',
                                         textAlign: TextAlign.center,
                                         style: const TextStyle(
                                           fontWeight: FontWeight.bold,
@@ -1423,7 +1621,6 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                               ],
                             ),
                           ),
-                          const SizedBox(width: 16),
                           // Loopback Counter - visible to all assigned users
                           Container(
                             padding: const EdgeInsets.all(12),

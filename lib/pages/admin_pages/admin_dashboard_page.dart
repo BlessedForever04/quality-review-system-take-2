@@ -10,6 +10,7 @@ import 'admin_project_details_page.dart';
 import '../../controllers/team_controller.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../services/excel_import_service.dart';
+import '../../components/project_statistics_card.dart';
 
 class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});
@@ -313,7 +314,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                   }),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
+              // Project Statistics
+              const ProjectStatisticsCard(),
+              const SizedBox(height: 16),
               // Search bar
               Container(
                 decoration: BoxDecoration(
