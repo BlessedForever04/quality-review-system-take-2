@@ -66,6 +66,12 @@ class EmployeeSidebar extends StatelessWidget {
               badgeCount: count,
             );
           }),
+          SidebarItem(
+            icon: Icons.auto_graph,
+            label: "Leader Performance",
+            active: selectedIndex == 2,
+            onTap: () => onItemSelected?.call(2),
+          ),
           const Spacer(),
 
           const SizedBox(height: 16),

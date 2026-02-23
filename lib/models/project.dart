@@ -15,6 +15,8 @@ class Project {
   String?
   reviewApplicableRemark; // Remark when isReviewApplicable is set to "no"
   double? overallDefectRate; // Overall defect rate for the project (0-100)
+  String?
+  userRole; // Role of the current user in this project (from membership)
 
   // New attributes from Excel import
   String? groupOrCostCentre;
@@ -46,6 +48,7 @@ class Project {
     this.isReviewApplicable,
     this.reviewApplicableRemark,
     this.overallDefectRate,
+    this.userRole,
     this.groupOrCostCentre,
     this.actionRequired,
     this.sponsor,
@@ -76,6 +79,7 @@ class Project {
     String? isReviewApplicable,
     String? reviewApplicableRemark,
     double? overallDefectRate,
+    String? userRole,
     String? groupOrCostCentre,
     String? actionRequired,
     String? sponsor,
@@ -106,6 +110,7 @@ class Project {
       reviewApplicableRemark:
           reviewApplicableRemark ?? this.reviewApplicableRemark,
       overallDefectRate: overallDefectRate ?? this.overallDefectRate,
+      userRole: userRole ?? this.userRole,
       groupOrCostCentre: groupOrCostCentre ?? this.groupOrCostCentre,
       actionRequired: actionRequired ?? this.actionRequired,
       sponsor: sponsor ?? this.sponsor,
@@ -161,6 +166,7 @@ class Project {
       isReviewApplicable: map['isReviewApplicable'],
       reviewApplicableRemark: map['reviewApplicableRemark'],
       overallDefectRate: parseNum(map['overallDefectRate']),
+      userRole: map['userRole'],
       groupOrCostCentre: map['groupOrCostCentre'],
       actionRequired: map['actionRequired'],
       sponsor: map['sponsor'],
@@ -192,6 +198,7 @@ class Project {
     'isReviewApplicable': isReviewApplicable,
     'reviewApplicableRemark': reviewApplicableRemark,
     'overallDefectRate': overallDefectRate,
+    'userRole': userRole,
     'groupOrCostCentre': groupOrCostCentre,
     'actionRequired': actionRequired,
     'sponsor': sponsor,

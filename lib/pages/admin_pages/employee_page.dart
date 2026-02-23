@@ -615,11 +615,6 @@ class EmployeePage extends StatelessWidget {
                                                 Text(e.name),
                                               ],
                                             ),
-                                            onTap: () => Get.to(
-                                              () => EmployeeProjectsPage(
-                                                member: e,
-                                              ),
-                                            ),
                                           ),
                                           DataCell(Text(e.email)),
                                           DataCell(_roleChip(e.role)),

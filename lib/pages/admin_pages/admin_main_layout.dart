@@ -4,6 +4,7 @@ import 'package:quality_review/components/admin_sidebar.dart';
 import 'package:quality_review/pages/admin_pages/admin_checklist_template_page.dart';
 import 'package:quality_review/pages/admin_pages/admin_dashboard_page.dart';
 import 'package:quality_review/pages/admin_pages/employee_page.dart';
+import 'package:quality_review/pages/admin_pages/employee_performance_page.dart';
 import '../../controllers/auth_controller.dart';
 import '../login.dart';
 
@@ -14,6 +15,7 @@ class AdminMainLayout extends StatelessWidget {
   final pages = const [
     AdminDashboardPage(),
     EmployeePage(),
+    EmployeePerformancePage(),
     AdminChecklistTemplatePage(),
   ];
 

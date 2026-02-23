@@ -60,10 +60,16 @@ class AdminSidebar extends StatelessWidget {
             onTap: () => onItemSelected?.call(1),
           ),
           SidebarItem(
-            icon: Icons.fact_check,
-            label: "Checklist Templates",
+            icon: Icons.auto_graph,
+            label: "Employee Performance",
             active: selectedIndex == 2,
             onTap: () => onItemSelected?.call(2),
+          ),
+          SidebarItem(
+            icon: Icons.fact_check,
+            label: "Checklist Templates",
+            active: selectedIndex == 3,
+            onTap: () => onItemSelected?.call(3),
           ),
           const Spacer(),
 
