@@ -12,6 +12,9 @@ class Project {
   List<String>? assignedEmployees;
   String?
   isReviewApplicable; // Toggle: null = not set, "yes" = Yes (normal workflow), "no" = No (mark as Completed)
+  String?
+  reviewApplicableRemark; // Remark when isReviewApplicable is set to "no"
+  double? overallDefectRate; // Overall defect rate for the project (0-100)
 
   // New attributes from Excel import
   String? groupOrCostCentre;
@@ -41,6 +44,8 @@ class Project {
     this.executor,
     this.assignedEmployees,
     this.isReviewApplicable,
+    this.reviewApplicableRemark,
+    this.overallDefectRate,
     this.groupOrCostCentre,
     this.actionRequired,
     this.sponsor,
@@ -69,6 +74,8 @@ class Project {
     String? executor,
     List<String>? assignedEmployees,
     String? isReviewApplicable,
+    String? reviewApplicableRemark,
+    double? overallDefectRate,
     String? groupOrCostCentre,
     String? actionRequired,
     String? sponsor,
@@ -96,6 +103,9 @@ class Project {
       executor: executor ?? this.executor,
       assignedEmployees: assignedEmployees ?? this.assignedEmployees,
       isReviewApplicable: isReviewApplicable ?? this.isReviewApplicable,
+      reviewApplicableRemark:
+          reviewApplicableRemark ?? this.reviewApplicableRemark,
+      overallDefectRate: overallDefectRate ?? this.overallDefectRate,
       groupOrCostCentre: groupOrCostCentre ?? this.groupOrCostCentre,
       actionRequired: actionRequired ?? this.actionRequired,
       sponsor: sponsor ?? this.sponsor,
@@ -149,6 +159,8 @@ class Project {
           ?.map((e) => e.toString())
           .toList(),
       isReviewApplicable: map['isReviewApplicable'],
+      reviewApplicableRemark: map['reviewApplicableRemark'],
+      overallDefectRate: parseNum(map['overallDefectRate']),
       groupOrCostCentre: map['groupOrCostCentre'],
       actionRequired: map['actionRequired'],
       sponsor: map['sponsor'],
@@ -178,6 +190,8 @@ class Project {
     'executor': executor,
     'assignedEmployees': assignedEmployees,
     'isReviewApplicable': isReviewApplicable,
+    'reviewApplicableRemark': reviewApplicableRemark,
+    'overallDefectRate': overallDefectRate,
     'groupOrCostCentre': groupOrCostCentre,
     'actionRequired': actionRequired,
     'sponsor': sponsor,

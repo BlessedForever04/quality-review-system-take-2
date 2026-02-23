@@ -76,8 +76,6 @@ class ProjectStatisticsCard extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 8),
           Text(
             count.toString(),
             style: TextStyle(

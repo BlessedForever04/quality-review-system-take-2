@@ -1282,11 +1282,35 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
     }
 
     // Initialize category and severity from widget props first
-    selectedCategory = widget.selectedCategoryId;
-    selectedSeverity = widget.selectedSeverity;
+    // Convert empty strings to null for dropdown compatibility
+    selectedCategory =
+        (widget.selectedCategoryId == null ||
+            widget.selectedCategoryId!.isEmpty)
+        ? null
+        : widget.selectedCategoryId;
+    selectedSeverity =
+        (widget.selectedSeverity == null || widget.selectedSeverity!.isEmpty)
+        ? null
+        : widget.selectedSeverity;
 
     // Then initialize data (which may override if initialData has values)
     _initializeData();
+
+    // Validate that selectedCategory exists in availableCategories
+    if (selectedCategory != null && widget.role == 'reviewer') {
+      final categoryIds = widget.availableCategories
+          .map((cat) => (cat['_id'] ?? '').toString())
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      if (!categoryIds.contains(selectedCategory)) {
+        if (kDebugMode) {
+          print(
+            '⚠️ Selected category ID "$selectedCategory" not found in available categories. Resetting to null.',
+          );
+        }
+        selectedCategory = null;
+      }
+    }
 
     // Load iterations if we have the necessary IDs
     if (widget.projectId != null && widget.stageId != null) {
@@ -1469,8 +1493,11 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
         _images = List<Map<String, dynamic>>.from(
           answers['reviewerImages'] ?? [],
         );
-        selectedCategory = answers['categoryId']?.toString();
-        selectedSeverity = answers['severity']?.toString();
+        // Convert empty strings to null for dropdown compatibility
+        final catId = answers['categoryId']?.toString();
+        selectedCategory = (catId == null || catId.isEmpty) ? null : catId;
+        final sev = answers['severity']?.toString();
+        selectedSeverity = (sev == null || sev.isEmpty) ? null : sev;
       }
     });
 
@@ -1682,27 +1709,51 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
             ),
           ),
         ],
-        RadioListTile<String>(
-          title: const Text("Yes"),
-          value: "Yes",
-          groupValue: selectedOption,
-          onChanged: (widget.editable && _selectedIterationNumber == 0)
-              ? (val) async {
-                  setState(() => selectedOption = val);
-                  await _updateAnswer();
-                }
-              : null,
-        ),
-        RadioListTile<String>(
-          title: const Text("No"),
-          value: "No",
-          groupValue: selectedOption,
-          onChanged: (widget.editable && _selectedIterationNumber == 0)
-              ? (val) async {
-                  setState(() => selectedOption = val);
-                  await _updateAnswer();
-                }
-              : null,
+        Row(
+          children: [
+            Expanded(
+              child: RadioListTile<String>(
+                title: const Text("Yes"),
+                value: "Yes",
+                groupValue: selectedOption,
+                contentPadding: EdgeInsets.zero,
+                onChanged: (widget.editable && _selectedIterationNumber == 0)
+                    ? (val) async {
+                        setState(() => selectedOption = val);
+                        await _updateAnswer();
+                      }
+                    : null,
+              ),
+            ),
+            Expanded(
+              child: RadioListTile<String>(
+                title: const Text("No"),
+                value: "No",
+                groupValue: selectedOption,
+                contentPadding: EdgeInsets.zero,
+                onChanged: (widget.editable && _selectedIterationNumber == 0)
+                    ? (val) async {
+                        setState(() => selectedOption = val);
+                        await _updateAnswer();
+                      }
+                    : null,
+              ),
+            ),
+            Expanded(
+              child: RadioListTile<String>(
+                title: const Text("Not Applicable"),
+                value: "NA",
+                groupValue: selectedOption,
+                contentPadding: EdgeInsets.zero,
+                onChanged: (widget.editable && _selectedIterationNumber == 0)
+                    ? (val) async {
+                        setState(() => selectedOption = val);
+                        await _updateAnswer();
+                      }
+                    : null,
+              ),
+            ),
+          ],
         ),
         // Allow clearing an existing answer when editable
         if (widget.editable &&
@@ -1830,14 +1881,27 @@ class _SubQuestionCardState extends State<SubQuestionCard> {
                     ),
                     items: [
                       const DropdownMenuItem(value: null, child: Text('None')),
-                      ...widget.availableCategories.map((cat) {
-                        final id = (cat['_id'] ?? '').toString();
-                        final name = (cat['name'] ?? 'Unknown').toString();
-                        return DropdownMenuItem(
-                          value: id,
-                          child: Text(name, overflow: TextOverflow.ellipsis),
-                        );
-                      }),
+                      ...() {
+                        final seen = <String>{};
+                        return widget.availableCategories
+                            .map((cat) {
+                              final id = (cat['_id'] ?? '').toString();
+                              final name = (cat['name'] ?? 'Unknown')
+                                  .toString();
+                              // Filter out empty or duplicate IDs
+                              if (id.isEmpty || seen.contains(id)) return null;
+                              seen.add(id);
+                              return DropdownMenuItem(
+                                value: id,
+                                child: Text(
+                                  name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            })
+                            .whereType<DropdownMenuItem<String>>()
+                            .toList();
+                      }(),
                     ],
                     onChanged:
                         (widget.editable && _selectedIterationNumber == 0)

@@ -587,104 +587,146 @@ class _AdminProjectDetailsPageState extends State<AdminProjectDetailsPage> {
   }
 
   Widget _buildReviewApplicableToggle(ProjectDetailsController details) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
-      child: Row(
-        children: [
-          const SizedBox(
-            width: 120,
-            child: Text(
-              'Is Review Applicable',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6.0),
+          child: Row(
+            children: [
+              const SizedBox(
+                width: 120,
+                child: Text(
+                  'Is Review Applicable',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              Expanded(
+                child: Row(
+                  children: [
+                    if (details.project.isReviewApplicable == null)
+                      Row(
+                        children: [
+                          const Text(
+                            'Not Set',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          if (details.project.status == 'Not Started') ...[
+                            ElevatedButton(
+                              onPressed: () =>
+                                  _handleReviewApplicableToggle(details, 'yes'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                minimumSize: const Size(60, 32),
+                              ),
+                              child: const Text(
+                                'Yes',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: () =>
+                                  _handleReviewApplicableToggle(details, 'no'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                minimumSize: const Size(60, 32),
+                              ),
+                              child: const Text(
+                                'No',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ],
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: details.project.isReviewApplicable == 'yes'
+                              ? Colors.green.withOpacity(0.1)
+                              : Colors.red.withOpacity(0.1),
+                          border: Border.all(
+                            color: details.project.isReviewApplicable == 'yes'
+                                ? Colors.green
+                                : Colors.red,
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          details.project.isReviewApplicable == 'yes'
+                              ? 'Yes'
+                              : 'No',
+                          style: TextStyle(
+                            color: details.project.isReviewApplicable == 'yes'
+                                ? Colors.green[800]
+                                : Colors.red[800],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: Row(
-              children: [
-                if (details.project.isReviewApplicable == null)
-                  Row(
-                    children: [
-                      const Text(
-                        'Not Set',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      if (details.project.status == 'Not Started') ...[
-                        ElevatedButton(
-                          onPressed: () =>
-                              _handleReviewApplicableToggle(details, 'yes'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            minimumSize: const Size(60, 32),
-                          ),
-                          child: const Text(
-                            'Yes',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: () =>
-                              _handleReviewApplicableToggle(details, 'no'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            minimumSize: const Size(60, 32),
-                          ),
-                          child: const Text(
-                            'No',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
-                      ],
-                    ],
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: details.project.isReviewApplicable == 'yes'
-                          ? Colors.green.withOpacity(0.1)
-                          : Colors.red.withOpacity(0.1),
-                      border: Border.all(
-                        color: details.project.isReviewApplicable == 'yes'
-                            ? Colors.green
-                            : Colors.red,
-                        width: 2,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      details.project.isReviewApplicable == 'yes'
-                          ? 'Yes'
-                          : 'No',
+        ),
+        // Show remark if "No" is selected
+        if (details.project.isReviewApplicable == 'no' &&
+            details.project.reviewApplicableRemark != null &&
+            details.project.reviewApplicableRemark!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 120, top: 8),
+            child: IntrinsicWidth(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 600),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(6),
+                  color: Colors.grey.shade50,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Remark: ',
                       style: TextStyle(
-                        color: details.project.isReviewApplicable == 'yes'
-                            ? Colors.green[800]
-                            : Colors.red[800],
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
                       ),
                     ),
-                  ),
-              ],
+                    Flexible(
+                      child: Text(
+                        details.project.reviewApplicableRemark!,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -695,11 +737,24 @@ class _AdminProjectDetailsPageState extends State<AdminProjectDetailsPage> {
     try {
       final projectService = Get.find<ProjectService>();
 
+      // If toggling to No, show dialog to get remark
+      String? remark;
+      if (value == 'no') {
+        if (!mounted) return;
+        remark = await showDialog<String>(
+          context: context,
+          builder: (ctx) => _RemarkDialog(),
+        );
+        // If user cancelled the dialog, don't proceed
+        if (remark == null) return;
+      }
+
       // If toggling to No, set status to Completed
       final newStatus = value == 'yes' ? details.project.status : 'Completed';
 
       final updatedProject = details.project.copyWith(
         isReviewApplicable: value,
+        reviewApplicableRemark: value == 'no' ? remark : null,
         status: newStatus,
       );
 
@@ -1359,4 +1414,71 @@ class TeamMemberFiltered {
   final String name;
   final String email;
   TeamMemberFiltered(this.id, this.name, this.email);
+}
+
+class _RemarkDialog extends StatefulWidget {
+  @override
+  State<_RemarkDialog> createState() => _RemarkDialogState();
+}
+
+class _RemarkDialogState extends State<_RemarkDialog> {
+  final _remarkController = TextEditingController();
+
+  @override
+  void dispose() {
+    _remarkController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Review Not Applicable - Add Remark'),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Please provide a reason why review is not applicable for this project:',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _remarkController,
+              decoration: const InputDecoration(
+                labelText: 'Remark',
+                hintText: 'Enter your remark here...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+              autofocus: true,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            if (_remarkController.text.trim().isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Please enter a remark'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
+            }
+            Navigator.of(context).pop(_remarkController.text.trim());
+          },
+          child: const Text('Confirm'),
+        ),
+      ],
+    );
+  }
 }

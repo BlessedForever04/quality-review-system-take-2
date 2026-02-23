@@ -205,6 +205,12 @@ class ExcelExportService {
           ? ''
           : (project.isReviewApplicable == 'yes' ? 'Yes' : 'No'),
     );
+    addRow(
+      'Overall Defect Rate (%)',
+      project.overallDefectRate != null
+          ? project.overallDefectRate!.toStringAsFixed(2)
+          : '',
+    );
 
     // Set column widths for better readability
     sheet.setColumnWidth(0, 25);

@@ -9,7 +9,7 @@ class ProjectQuestion {
   final String? executorAnswer; // "Yes", "No", "NA", or null
   final String? executorRemark;
   final String?
-  reviewerAnswer; // "Yes", "No", or null - the actual reviewer answer
+  reviewerAnswer; // "Yes", "No", "NA", or null - the actual reviewer answer
   final String? reviewerStatus; // "Approved", "Rejected", or null
   final String? reviewerRemark;
 

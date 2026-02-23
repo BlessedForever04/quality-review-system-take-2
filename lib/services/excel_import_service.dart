@@ -25,6 +25,7 @@ class ExcelImportService {
     'Planned Efforts',
     'Actual Efforts',
     'Is Review Applicable',
+    'Overall Defect Rate (%)',
   ];
 
   List<Project> parse(Uint8List bytes) {
@@ -123,6 +124,7 @@ class ExcelImportService {
         isReviewApplicable: parseReviewApplicable(
           cell(row, 'Is Review Applicable'),
         ),
+        overallDefectRate: num(cell(row, 'Overall Defect Rate (%)')),
       );
       projects.add(p);
     }

@@ -6,6 +6,7 @@ import '../../controllers/projects_controller.dart';
 import '../../controllers/team_controller.dart';
 import '../../controllers/export_controller.dart';
 import '../../components/project_statistics_card.dart';
+import '../../services/project_membership_service.dart';
 
 class EmployeeDashboard extends StatefulWidget {
   const EmployeeDashboard({super.key});
@@ -19,19 +20,22 @@ class _AdminDashboardPageState extends State<EmployeeDashboard> {
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
   String _sortKey = 'started';
-  bool _ascending = false; // default: newest first
-  final Set<String> _selectedStatuses = {}; // Start with no filters selected
+  bool _ascending = false;
+  final Set<String> _selectedStatuses = {};
+  int _currentPage = 1;
+  final int _itemsPerPage = 12;
+  final ScrollController _horizontalScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _ctrl = Get.find<ProjectsController>();
-    // Projects are automatically loaded via real-time stream in ProjectsController
   }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _horizontalScrollController.dispose();
     super.dispose();
   }
 
@@ -55,8 +59,10 @@ class _AdminDashboardPageState extends State<EmployeeDashboard> {
     int cmp(Project a, Project b) {
       int res = 0;
       switch (_sortKey) {
-        case 'title':
-          res = a.title.toLowerCase().compareTo(b.title.toLowerCase());
+        case 'defectRate':
+          final aRate = a.overallDefectRate ?? 0.0;
+          final bRate = b.overallDefectRate ?? 0.0;
+          res = aRate.compareTo(bRate);
           break;
         case 'started':
           res = a.started.compareTo(b.started);
@@ -67,11 +73,6 @@ class _AdminDashboardPageState extends State<EmployeeDashboard> {
           break;
         case 'status':
           res = a.status.toLowerCase().compareTo(b.status.toLowerCase());
-          break;
-        case 'executor':
-          res = (a.executor ?? '').toLowerCase().compareTo(
-            (b.executor ?? '').toLowerCase(),
-          );
           break;
       }
       return _ascending ? res : -res;
@@ -242,98 +243,190 @@ class _AdminDashboardPageState extends State<EmployeeDashboard> {
               const SizedBox(height: 16),
               // Tabular layout using ListView + Rows
               Obx(() {
-                final projects = _visibleProjects;
+                final allProjects = _visibleProjects;
+                final totalProjects = allProjects.length;
+                final totalPages = (totalProjects / _itemsPerPage).ceil();
+
+                // Ensure current page is valid
+                if (_currentPage > totalPages && totalPages > 0) {
+                  _currentPage = totalPages;
+                }
+                if (_currentPage < 1) {
+                  _currentPage = 1;
+                }
+
+                // Calculate pagination range
+                final startIndex = (_currentPage - 1) * _itemsPerPage;
+                final endIndex = (startIndex + _itemsPerPage).clamp(
+                  0,
+                  totalProjects,
+                );
+                final projects = allProjects.sublist(
+                  startIndex.clamp(0, totalProjects),
+                  endIndex,
+                );
+
                 return Column(
                   children: [
-                    // Header row
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 16,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(6),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: const Text(
-                              'Project No.',
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: Colors.blueGrey,
-                                fontSize: 13,
+                    // Pagination controls at top left
+                    _buildPaginationControls(
+                      totalProjects,
+                      startIndex,
+                      endIndex,
+                      totalPages,
+                    ),
+                    const SizedBox(height: 12),
+                    // Single horizontal scrollbar wrapping the entire table
+                    Scrollbar(
+                      controller: _horizontalScrollController,
+                      thumbVisibility: true,
+                      thickness: 10.0,
+                      child: SingleChildScrollView(
+                        controller: _horizontalScrollController,
+                        scrollDirection: Axis.horizontal,
+                        child: Column(
+                          children: [
+                            // Header row
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 12,
+                                horizontal: 16,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(6),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Colors.black12,
+                                    blurRadius: 4,
+                                    offset: Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 150,
+                                    child: const Text(
+                                      'Project No.',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blueGrey,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 250,
+                                    child: const Text(
+                                      'Project Title',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blueGrey,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 150,
+                                    child: const Text(
+                                      'Team Leader',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blueGrey,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 180,
+                                    child: const Text(
+                                      'Executors',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blueGrey,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 180,
+                                    child: const Text(
+                                      'Reviewers',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blueGrey,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 120,
+                                    child: _HeaderCell(
+                                      label: 'Defect Rate',
+                                      active: _sortKey == 'defectRate',
+                                      ascending: _ascending,
+                                      onTap: () => _toggleSort('defectRate'),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 120,
+                                    child: _HeaderCell(
+                                      label: 'Started',
+                                      active: _sortKey == 'started',
+                                      ascending: _ascending,
+                                      onTap: () => _toggleSort('started'),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 120,
+                                    child: _HeaderCell(
+                                      label: 'Priority',
+                                      active: _sortKey == 'priority',
+                                      ascending: _ascending,
+                                      onTap: () => _toggleSort('priority'),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 120,
+                                    child: _HeaderCell(
+                                      label: 'Status',
+                                      active: _sortKey == 'status',
+                                      ascending: _ascending,
+                                      onTap: () => _toggleSort('status'),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 150,
+                                    child: const Text(
+                                      'Created By',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blueGrey,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  // Actions column removed (moved to details page)
+                                ],
                               ),
                             ),
-                          ),
-                          Expanded(
-                            flex: 3,
-                            child: _HeaderCell(
-                              label: 'Project Title',
-                              active: _sortKey == 'title',
-                              ascending: _ascending,
-                              onTap: () => _toggleSort('title'),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: _HeaderCell(
-                              label: 'Started',
-                              active: _sortKey == 'started',
-                              ascending: _ascending,
-                              onTap: () => _toggleSort('started'),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: _HeaderCell(
-                              label: 'Priority',
-                              active: _sortKey == 'priority',
-                              ascending: _ascending,
-                              onTap: () => _toggleSort('priority'),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: _HeaderCell(
-                              label: 'Status',
-                              active: _sortKey == 'status',
-                              ascending: _ascending,
-                              onTap: () => _toggleSort('status'),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: _HeaderCell(
-                              label: 'Created By',
-                              active: _sortKey == 'executor',
-                              ascending: _ascending,
-                              onTap: () => _toggleSort('executor'),
-                            ),
-                          ),
-                          // Actions column removed (moved to details page)
-                        ],
+                            const SizedBox(height: 8),
+                            // Project rows without individual scrollbars
+                            ...projects
+                                .map(
+                                  (proj) => _EmployeeProjectCard(project: proj),
+                                )
+                                .toList(),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: projects.length,
-                      itemBuilder: (context, index) {
-                        final proj = projects[index];
-                        return _EmployeeProjectCard(project: proj);
-                      },
                     ),
                   ],
                 );
@@ -346,6 +439,51 @@ class _AdminDashboardPageState extends State<EmployeeDashboard> {
   }
 
   // Description now lives on Project model; no temp store needed.
+
+  Widget _buildPaginationControls(
+    int total,
+    int start,
+    int end,
+    int totalPages,
+  ) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.start,
+      children: [
+        Text(
+          total > 0 ? '${start + 1}-$end of $total' : '0 of 0',
+          style: const TextStyle(fontSize: 13, color: Colors.black87),
+        ),
+        const SizedBox(width: 16),
+        IconButton(
+          icon: const Icon(Icons.chevron_left, size: 20),
+          onPressed: _currentPage > 1
+              ? () {
+                  setState(() {
+                    _currentPage--;
+                  });
+                }
+              : null,
+          tooltip: 'Previous',
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        ),
+        const SizedBox(width: 8),
+        IconButton(
+          icon: const Icon(Icons.chevron_right, size: 20),
+          onPressed: _currentPage < totalPages
+              ? () {
+                  setState(() {
+                    _currentPage++;
+                  });
+                }
+              : null,
+          tooltip: 'Next',
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        ),
+      ],
+    );
+  }
 }
 
 class _EmployeeProjectCard extends StatefulWidget {
@@ -359,6 +497,47 @@ class _EmployeeProjectCard extends StatefulWidget {
 
 class _EmployeeProjectCardState extends State<_EmployeeProjectCard> {
   bool _isHovered = false;
+  bool _loadingMembers = false;
+  List<String> _teamLeaders = [];
+  List<String> _executors = [];
+  List<String> _reviewers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTeamMembers();
+  }
+
+  Future<void> _loadTeamMembers() async {
+    if (!mounted) return;
+    setState(() => _loadingMembers = true);
+    try {
+      if (Get.isRegistered<ProjectMembershipService>()) {
+        final svc = Get.find<ProjectMembershipService>();
+        final memberships = await svc.getProjectMembers(widget.project.id);
+        if (mounted) {
+          setState(() {
+            _teamLeaders = memberships
+                .where((m) => (m.roleName?.toLowerCase() ?? '') == 'teamleader')
+                .map((m) => m.userName ?? 'Unknown')
+                .toList();
+            _executors = memberships
+                .where((m) => (m.roleName?.toLowerCase() ?? '') == 'executor')
+                .map((m) => m.userName ?? 'Unknown')
+                .toList();
+            _reviewers = memberships
+                .where((m) => (m.roleName?.toLowerCase() ?? '') == 'reviewer')
+                .map((m) => m.userName ?? 'Unknown')
+                .toList();
+          });
+        }
+      }
+    } catch (e) {
+      // Silently fail - just show no members
+    } finally {
+      if (mounted) setState(() => _loadingMembers = false);
+    }
+  }
 
   Widget _priorityChip(String p) {
     Color bg = const Color(0xFFEFF3F7);
@@ -417,8 +596,8 @@ class _EmployeeProjectCardState extends State<_EmployeeProjectCard> {
               : Matrix4.identity(),
           child: Row(
             children: [
-              Expanded(
-                flex: 2,
+              SizedBox(
+                width: 150,
                 child: Text(
                   (widget.project.projectNo?.trim().isNotEmpty ?? false)
                       ? widget.project.projectNo!.trim()
@@ -427,36 +606,94 @@ class _EmployeeProjectCardState extends State<_EmployeeProjectCard> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Expanded(
-                flex: 3,
+              SizedBox(
+                width: 250,
                 child: Text(
                   widget.project.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Expanded(
-                flex: 2,
+              SizedBox(
+                width: 150,
+                child: Text(
+                  _loadingMembers
+                      ? 'Loading...'
+                      : _teamLeaders.isEmpty
+                      ? '--'
+                      : _teamLeaders.join(', '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: Text(
+                  _loadingMembers
+                      ? 'Loading...'
+                      : _executors.isEmpty
+                      ? '--'
+                      : _executors.join(', '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: Text(
+                  _loadingMembers
+                      ? 'Loading...'
+                      : _reviewers.isEmpty
+                      ? '--'
+                      : _reviewers.join(', '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+              SizedBox(
+                width: 120,
+                child: Text(
+                  widget.project.overallDefectRate != null
+                      ? '${widget.project.overallDefectRate!.toStringAsFixed(1)}%'
+                      : '--',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: (widget.project.overallDefectRate ?? 0) > 10
+                        ? Colors.red
+                        : Colors.black87,
+                    fontWeight: (widget.project.overallDefectRate ?? 0) > 10
+                        ? FontWeight.w600
+                        : FontWeight.normal,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 120,
                 child: Text(
                   '${widget.project.started.year}-${widget.project.started.month.toString().padLeft(2, '0')}-${widget.project.started.day.toString().padLeft(2, '0')}',
                 ),
               ),
-              Expanded(
-                flex: 2,
+              SizedBox(
+                width: 120,
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: _priorityChip(widget.project.priority),
                 ),
               ),
-              Expanded(
-                flex: 2,
+              SizedBox(
+                width: 120,
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text((widget.project.status).toString()),
                 ),
               ),
-              Expanded(
-                flex: 2,
+              SizedBox(
+                width: 150,
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(executor),
@@ -753,17 +990,16 @@ class _HeaderCell extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: color,
-                fontSize: 13,
-              ),
-              overflow: TextOverflow.ellipsis,
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: color,
+              fontSize: 13,
             ),
+            overflow: TextOverflow.ellipsis,
           ),
+          const SizedBox(width: 4),
           Icon(icon, size: 16, color: color),
         ],
       ),

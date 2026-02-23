@@ -68,6 +68,21 @@ class ProjectService {
       }
     }
 
+    // Handle reviewApplicableRemark field
+    String? reviewApplicableRemark;
+    if (j.containsKey('reviewApplicableRemark')) {
+      reviewApplicableRemark = j['reviewApplicableRemark']?.toString();
+    }
+
+    // Handle overallDefectRate field
+    double? overallDefectRate;
+    if (j.containsKey('overallDefectRate')) {
+      final value = j['overallDefectRate'];
+      if (value is num) {
+        overallDefectRate = value.toDouble();
+      }
+    }
+
     return Project(
       id: id,
       projectNo: projectNo,
@@ -80,6 +95,8 @@ class ProjectService {
       executor: creatorName ?? creatorId, // Use creator name or ID
       assignedEmployees: assignedEmployees, // From backend or null
       isReviewApplicable: isReviewApplicable,
+      reviewApplicableRemark: reviewApplicableRemark,
+      overallDefectRate: overallDefectRate,
     );
   }
 
@@ -105,6 +122,8 @@ class ProjectService {
       if (userId != null) 'created_by': userId,
       if (p.isReviewApplicable != null)
         'isReviewApplicable': p.isReviewApplicable,
+      if (p.reviewApplicableRemark != null)
+        'reviewApplicableRemark': p.reviewApplicableRemark,
     };
   }
 
