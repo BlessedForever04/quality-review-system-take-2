@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:quality_review/components/empolyee_sidebar.dart';
 import 'package:quality_review/pages/employee_pages/employee_dashboard.dart';
 import 'package:quality_review/pages/employee_pages/myproject.dart';
+import 'package:quality_review/pages/employee_pages/leader_performance.dart';
 import '../../controllers/auth_controller.dart';
 import '../login.dart';
 
@@ -16,7 +17,7 @@ class EmployeeMainLayout extends StatefulWidget {
 class _EmployeeMainLayoutState extends State<EmployeeMainLayout> {
   int selectedIndex = 0;
 
-  final pages = [EmployeeDashboard(), Myproject()];
+  final pages = [EmployeeDashboard(), Myproject(), LeaderPerformance()];
 
   @override
   Widget build(BuildContext context) {

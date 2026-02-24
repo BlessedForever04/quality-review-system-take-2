@@ -181,22 +181,7 @@ class _EmployeeProjectsPageState extends State<EmployeeProjectsPage> {
 
                 return SingleChildScrollView(
                   padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Projects for ${widget.member.name}',
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Total: ${_current.length + _completed.length} projects',
-                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                      ),
-                      const SizedBox(height: 24),
-                      content,
-                    ],
-                  ),
+                  child: content,
                 );
               },
             ),

@@ -83,6 +83,12 @@ class ProjectService {
       }
     }
 
+    // Handle userRole field (from optimized endpoint)
+    String? userRole;
+    if (j.containsKey('userRole')) {
+      userRole = j['userRole']?.toString();
+    }
+
     return Project(
       id: id,
       projectNo: projectNo,
@@ -97,6 +103,7 @@ class ProjectService {
       isReviewApplicable: isReviewApplicable,
       reviewApplicableRemark: reviewApplicableRemark,
       overallDefectRate: overallDefectRate,
+      userRole: userRole,
     );
   }
 

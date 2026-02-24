@@ -27,8 +27,10 @@ class ProjectsController extends GetxController {
   void _startRealtimeSync() {
     isLoading.value = true;
     _projectsSubscription = _service.getProjectsStream().listen(
-      (projectsList) {
+      (projectsList) async {
         projects.assignAll(projectsList.map(_normalize));
+        // Hydrate assignments for each project
+        await _hydrateAssignments();
         isLoading.value = false;
         errorMessage.value = '';
       },
@@ -93,6 +95,15 @@ class ProjectsController extends GetxController {
         (p) => (p.assignedEmployees ?? const []).any(
           (e) => e.trim() == employeeId.trim(),
         ),
+      )
+      .toList();
+
+  // Find projects where the user has the TeamLeader role
+  List<Project> byTeamLeaderId(String userId) => projects
+      .where(
+        (p) =>
+            p.userRole != null &&
+            p.userRole!.toLowerCase().contains('teamleader'),
       )
       .toList();
 
